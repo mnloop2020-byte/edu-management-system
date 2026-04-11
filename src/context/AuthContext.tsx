@@ -1,7 +1,10 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
+import api from '../api/api'
+
 interface User {
-  name :string
+  id: number
+  name: string
   email: string
   role: string
 }
