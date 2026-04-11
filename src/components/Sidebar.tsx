@@ -1,87 +1,126 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import api from '../api/api'
 
-const navItems = [
-  {
-    path: '/',
-    label: 'Dashboard',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" rx="1.5" />
-        <rect x="14" y="3" width="7" height="7" rx="1.5" />
-        <rect x="3" y="14" width="7" height="7" rx="1.5" />
-        <rect x="14" y="14" width="7" height="7" rx="1.5" />
-      </svg>
-    ),
-    badge: null,
-  },
-  {
-    path: '/students',
-    label: 'Students',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
-    ),
-    badge: '124',
-  },
-  {
-    path: '/teachers',
-    label: 'Teachers',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-        <circle cx="12" cy="7" r="4" />
-      </svg>
-    ),
-    badge: '18',
-  },
-  {
-    path: '/attendance',
-    label: 'Attendance',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="4" width="18" height="18" rx="2" />
-        <line x1="16" y1="2" x2="16" y2="6" />
-        <line x1="8" y1="2" x2="8" y2="6" />
-        <line x1="3" y1="10" x2="21" y2="10" />
-        <path d="M9 16l2 2 4-4" />
-      </svg>
-    ),
-    badge: null,
-  },
-  {
-    path: '/payments',
-    label: 'Payments',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="5" width="20" height="14" rx="2" />
-        <line x1="2" y1="10" x2="22" y2="10" />
-      </svg>
-    ),
-    badge: '12',
-    badgeAlert: true,
-  },
-  {
-    path: '/reports',
-    label: 'Reports',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="20" x2="18" y2="10" />
-        <line x1="12" y1="20" x2="12" y2="4" />
-        <line x1="6" y1="20" x2="6" y2="14" />
-      </svg>
-    ),
-    badge: null,
-  },
-]
+interface Counts {
+  students: number
+  teachers: number
+  payments: number
+}
 
 export default function Sidebar() {
   const location = useLocation()
+  const { user, logout } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [hovered, setHovered] = useState<string | null>(null)
+  const [counts, setCounts] = useState<Counts>({ students: 0, teachers: 0, payments: 0 })
+
+  const initials = user?.name
+    ? user.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+    : 'U'
+
+  useEffect(() => {
+    async function fetchCounts() {
+      try {
+        const [studentsRes, teachersRes, paymentsRes] = await Promise.all([
+          api.get('/students'),
+          api.get('/teachers'),
+          api.get('/payments?status=pending'),
+        ])
+        setCounts({
+          students: studentsRes.data.students.length,
+          teachers: teachersRes.data.teachers.length,
+          payments: paymentsRes.data.payments.length,
+        })
+      } catch {
+        // silently fail
+      }
+    }
+    fetchCounts()
+  }, [])
+
+  const navItems = [
+    {
+      path: '/',
+      label: 'Dashboard',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+      ),
+      badge: null,
+      badgeAlert: false,
+    },
+    {
+      path: '/students',
+      label: 'Students',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      ),
+      badge: counts.students > 0 ? String(counts.students) : null,
+      badgeAlert: false,
+    },
+    {
+      path: '/teachers',
+      label: 'Teachers',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      ),
+      badge: counts.teachers > 0 ? String(counts.teachers) : null,
+      badgeAlert: false,
+    },
+    {
+      path: '/attendance',
+      label: 'Attendance',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+          <path d="M9 16l2 2 4-4" />
+        </svg>
+      ),
+      badge: null,
+      badgeAlert: false,
+    },
+    {
+      path: '/payments',
+      label: 'Payments',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="5" width="20" height="14" rx="2" />
+          <line x1="2" y1="10" x2="22" y2="10" />
+        </svg>
+      ),
+      badge: counts.payments > 0 ? String(counts.payments) : null,
+      badgeAlert: true,
+    },
+    {
+      path: '/reports',
+      label: 'Reports',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      ),
+      badge: null,
+      badgeAlert: false,
+    },
+  ]
 
   return (
     <aside
@@ -157,15 +196,12 @@ export default function Sidebar() {
                     : 'text-white/45 hover:text-white/85 hover:bg-white/[0.05]'
                 }`}
               >
-                {/* Active bar */}
                 {isActive && (
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 bg-violet-400 rounded-r-full" />
                 )}
-
                 <span className={`shrink-0 transition-colors ${isActive ? 'text-violet-400' : 'text-white/35'}`}>
                   {item.icon}
                 </span>
-
                 {!collapsed && (
                   <>
                     <span className="text-[13px] font-medium flex-1 whitespace-nowrap">{item.label}</span>
@@ -184,7 +220,6 @@ export default function Sidebar() {
                 )}
               </Link>
 
-              {/* Tooltip when collapsed */}
               {collapsed && isHov && (
                 <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2.5 py-1.5 bg-[#1C1F27] border border-white/[0.1] rounded-lg text-[12px] text-white/90 whitespace-nowrap z-50 shadow-xl pointer-events-none">
                   {item.label}
@@ -203,23 +238,29 @@ export default function Sidebar() {
       {/* Divider */}
       <div className="mx-3 border-t border-white/[0.06]" />
 
-      {/* Bottom: User */}
+      {/* User */}
       <div className="px-2 py-3">
-        <div
-          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer transition-colors ${collapsed ? 'justify-center' : ''}`}
-        >
+        <div className={`flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer transition-colors ${collapsed ? 'justify-center' : ''}`}>
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shrink-0 text-[10px] font-bold text-white select-none">
-            AH
+            {initials}
           </div>
           {!collapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-medium text-white/80 truncate leading-none">Ahmed Hassan</p>
-                <p className="text-[10px] text-white/30 truncate mt-0.5">Administrator</p>
+                <p className="text-[12px] font-medium text-white/80 truncate leading-none">{user?.name || 'User'}</p>
+                <p className="text-[10px] text-white/30 truncate mt-0.5 capitalize">{user?.role?.toLowerCase() || 'admin'}</p>
               </div>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/20 shrink-0">
-                <circle cx="12" cy="5" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="19" r="1" />
-              </svg>
+              <button
+                onClick={logout}
+                title="Sign out"
+                className="w-6 h-6 flex items-center justify-center rounded-lg text-white/25 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+              </button>
             </>
           )}
         </div>
