@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import api from '../api/api'
+import { createContext, useContext, useState, useEffect } from 'react'
+import type { ReactNode } from 'react'
 interface User {
   name :string
   email: string
