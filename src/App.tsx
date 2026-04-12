@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import Landing from './pages/Landing'
 import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
 import Students from './pages/Students'
@@ -112,7 +113,7 @@ function Layout() {
 function LoginRedirect() {
   const { token, isLoading } = useAuth()
   if (isLoading) return null
-  return token ? <Navigate to="/" replace /> : <Login />
+  return token ? <Navigate to="/" replace /> : <Navigate to="/landing" replace />  // ← التعديل هنا
 }
 
 // ── App Root ─────────────────────────────────────────────
@@ -121,6 +122,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          <Route path="/landing" element={<Landing />} />
           <Route path="/login" element={<LoginRedirect />} />
           <Route path="/register" element={<Register />} />
           <Route
