@@ -85,6 +85,7 @@ export default function Login() {
               />
             </div>
 
+
             {/* Submit */}
             <button
               type="submit"
@@ -104,8 +105,14 @@ export default function Login() {
         </div>
 
         <p className="text-center text-[11px] text-white/20 mt-5">
-          EduSystem Management Platform
-        </p>
+  EduSystem Management Platform
+</p>
+<p className="text-center text-[12px] text-white/30 mt-3">
+  ليس لديك حساب؟{' '}
+  <button onClick={() => navigate('/register')} className="text-violet-400 hover:text-violet-300 transition-colors">
+    إنشاء حساب
+  </button>
+</p>
       </div>
     </div>
   )

@@ -7,6 +7,7 @@ import Attendance from './pages/Attendance'
 import Payments from './pages/Payments'
 import Reports from './pages/Reports'
 import Login from './pages/Login'
+import Register from './pages/Register'
 import { AuthProvider, useAuth } from './context/AuthContext'
 
 // ── عناوين الصفحات ──────────────────────────────────────
@@ -121,6 +122,7 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginRedirect />} />
+          <Route path="/register" element={<Register />} />
           <Route
             path="/*"
             element={
