@@ -19,26 +19,6 @@ export default function Chatbot() {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, open])
 
-  async function fetchSystemData() {
-    try {
-      const [studentsRes, paymentsRes, summaryRes, attendanceRes] = await Promise.all([
-        api.get('/students'),
-        api.get('/payments'),
-        api.get('/payments/summary'),
-        api.get('/attendance'),
-      ])
-
-      const students = studentsRes.data.students || []
-      const payments = paymentsRes.data.payments || []
-      const summary = summaryRes.data.summary || {}
-      const attendance = attendanceRes.data.records || []
-
-      return { students, payments, summary, attendance }
-    } catch {
-      return null
-    }
-  }
-
   async function sendMessage() {
     if (!input.trim() || loading) return
 
@@ -48,66 +28,14 @@ export default function Chatbot() {
     setLoading(true)
 
     try {
-      const data = await fetchSystemData()
+      const history = messages.slice(1).map(m => ({ role: m.role, content: m.content }))
 
-      const systemPrompt = `أنت مساعد ذكي لنظام إدارة تعليمي. لديك البيانات التالية الحقيقية من النظام:
-
-${data ? `
-## الطلاب (${data.students.length} طالب):
-${JSON.stringify(data.students.map((s: any) => ({
-  id: s.id,
-  name: s.name,
-  course: s.course,
-  grade: s.grade,
-  status: s.status,
-})), null, 2)}
-
-## ملخص المدفوعات:
-- إجمالي الرسوم: ${data.summary.total} ريال
-- المحصّل: ${data.summary.paid} ريال
-- المعلق: ${data.summary.pending} ريال
-- المتأخر: ${data.summary.overdue} ريال
-
-## سجلات الدفع (${data.payments.length} سجل):
-${JSON.stringify(data.payments.map((p: any) => ({
-  student: p.student?.name,
-  amount: p.amount,
-  status: p.status,
-  date: p.date,
-})), null, 2)}
-
-## سجلات الحضور اليوم (${data.attendance.length} سجل):
-${JSON.stringify(data.attendance.map((a: any) => ({
-  student: a.student?.name,
-  status: a.status,
-})), null, 2)}
-` : 'تعذر جلب البيانات حالياً.'}
-
-## تعليمات:
-- أجب بالعربية دائماً
-- كن محدداً واذكر الأرقام والأسماء الحقيقية من البيانات
-- إذا سألوا عن طالب معين ابحث في القائمة وأعطِ معلومات دقيقة
-- إذا طلبوا ملخصاً أعطِ إحصائيات شاملة
-- كن مختصراً وواضحاً`
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: systemPrompt,
-          messages: [
-            ...messages.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: userMsg.content }
-          ],
-        }),
+      const res = await api.post('/ai/chat', {
+        message: userMsg.content,
+        history,
       })
 
-      const result = await response.json()
-      const reply = result.content?.[0]?.text || 'عذراً، حدث خطأ.'
-
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }])
+      setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply }])
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'عذراً، حدث خطأ في الاتصال. حاول مرة أخرى.' }])
     } finally {
@@ -120,7 +48,7 @@ ${JSON.stringify(data.attendance.map((a: any) => ({
       {/* Floating Button */}
       <button
         onClick={() => setOpen(prev => !prev)}
-        className="fixed bottom-6 right-6 z-50 w-13 h-13 w-[52px] h-[52px] rounded-2xl bg-violet-600 hover:bg-violet-500 shadow-lg shadow-violet-500/30 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+        className="fixed bottom-6 right-6 z-50 w-[52px] h-[52px] rounded-2xl bg-violet-600 hover:bg-violet-500 shadow-lg shadow-violet-500/30 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
       >
         {open ? (
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
@@ -135,9 +63,10 @@ ${JSON.stringify(data.attendance.map((a: any) => ({
 
       {/* Chat Window */}
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 w-[360px] bg-[#111318] border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-          style={{ height: '480px' }}>
-
+        <div
+          className="fixed bottom-24 right-6 z-50 w-[360px] bg-[#111318] border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+          style={{ height: '480px' }}
+        >
           {/* Header */}
           <div className="px-4 py-3.5 border-b border-white/[0.06] flex items-center gap-3 shrink-0">
             <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center">
@@ -185,7 +114,7 @@ ${JSON.stringify(data.attendance.map((a: any) => ({
           {messages.length === 1 && (
             <div className="px-4 pb-2 flex flex-wrap gap-1.5 shrink-0">
               {['كم عدد الطلاب؟', 'ملخص المدفوعات', 'من غاب اليوم؟', 'أداء الفصل'].map(s => (
-                <button key={s} onClick={() => { setInput(s); }}
+                <button key={s} onClick={() => setInput(s)}
                   className="text-[11px] px-2.5 py-1 rounded-lg border border-white/[0.08] text-white/40 hover:text-violet-400 hover:border-violet-500/30 transition-colors">
                   {s}
                 </button>
