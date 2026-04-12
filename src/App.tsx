@@ -9,9 +9,7 @@ import Payments from './pages/Payments'
 import Reports from './pages/Reports'
 import Login from './pages/Login'
 import Register from './pages/Register'
-import { AuthProvider, useAuth } from './context/AuthContext'
-
-// ── عناوين الصفحات ──────────────────────────────────────
+import Chatbot from './components/Chatbot'
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/':           { title: 'Dashboard',  subtitle: 'Overview of your institution' },
   '/students':   { title: 'Students',   subtitle: 'Manage enrolled students' },
@@ -21,7 +19,6 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/reports':    { title: 'Reports',    subtitle: 'Analytics and insights' },
 }
 
-// ── حماية الصفحات ──────────────────────────────────────
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, isLoading } = useAuth()
 
@@ -33,14 +30,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!token) {
-    return <Navigate to="/landing" replace />
-  }
+  if (!token) return <Navigate to="/landing" replace />
 
   return <>{children}</>
 }
 
-// ── TopBar ───────────────────────────────────────────────
 function TopBar() {
   const location = useLocation()
   const { user, logout } = useAuth()
@@ -87,7 +81,6 @@ function TopBar() {
   )
 }
 
-// ── Layout ───────────────────────────────────────────────
 function Layout() {
   return (
     <div className="flex h-screen bg-[#0D0F12] text-white overflow-hidden">
@@ -105,28 +98,23 @@ function Layout() {
           </Routes>
         </main>
       </div>
+      {/* Chatbot عائم في كل الصفحات */}
+      <Chatbot />
     </div>
   )
 }
 
-// ── LoginRedirect ────────────────────────────────────────
 function LoginRedirect() {
   const { token, isLoading } = useAuth()
   const location = useLocation()
-  const fromLanding = location.state?.fromLanding  // ← جاء من زر Landing؟
+  const fromLanding = location.state?.fromLanding
 
   if (isLoading) return null
-
   if (token) return <Navigate to="/" replace />
-
-  // إذا ضغط زر "تسجيل الدخول" من Landing → عرض صفحة Login
   if (fromLanding) return <Login />
-
-  // إذا كتب /login مباشرة في الـ URL → يرجع لـ Landing
   return <Navigate to="/landing" replace />
 }
 
-// ── App Root ─────────────────────────────────────────────
 function App() {
   return (
     <BrowserRouter>
