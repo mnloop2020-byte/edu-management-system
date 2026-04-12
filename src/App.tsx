@@ -10,6 +10,8 @@ import Reports from './pages/Reports'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Chatbot from './components/Chatbot'
+import { AuthProvider, useAuth } from './context/AuthContext'
+
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/':           { title: 'Dashboard',  subtitle: 'Overview of your institution' },
   '/students':   { title: 'Students',   subtitle: 'Manage enrolled students' },
@@ -98,7 +100,6 @@ function Layout() {
           </Routes>
         </main>
       </div>
-      {/* Chatbot عائم في كل الصفحات */}
       <Chatbot />
     </div>
   )
