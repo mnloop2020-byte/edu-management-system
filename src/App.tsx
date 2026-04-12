@@ -34,7 +34,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!token) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/landing" replace />
   }
 
   return <>{children}</>
@@ -112,8 +112,18 @@ function Layout() {
 // ── LoginRedirect ────────────────────────────────────────
 function LoginRedirect() {
   const { token, isLoading } = useAuth()
+  const location = useLocation()
+  const fromLanding = location.state?.fromLanding  // ← جاء من زر Landing؟
+
   if (isLoading) return null
-  return token ? <Navigate to="/" replace /> : <Navigate to="/landing" replace />  // ← التعديل هنا
+
+  if (token) return <Navigate to="/" replace />
+
+  // إذا ضغط زر "تسجيل الدخول" من Landing → عرض صفحة Login
+  if (fromLanding) return <Login />
+
+  // إذا كتب /login مباشرة في الـ URL → يرجع لـ Landing
+  return <Navigate to="/landing" replace />
 }
 
 // ── App Root ─────────────────────────────────────────────

@@ -109,7 +109,7 @@ export default function Landing() {
           style={{ animation: 'fadeUp .6s .2s ease both' }}
         >
           <button
-            onClick={() => navigate('/login')}
+            onClick={() => navigate('/login', { state: { fromLanding: true } })}  {/* ← التعديل هنا */}
             className="px-7 py-3 bg-violet-600 hover:bg-violet-500 text-white text-[14px] font-semibold rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg shadow-violet-500/20"
           >
             تسجيل الدخول
