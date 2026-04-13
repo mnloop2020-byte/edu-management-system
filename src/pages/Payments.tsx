@@ -97,17 +97,16 @@ export default function Payments() {
   }
 
   async function markAsPaid(id: number) {
-    setUpdatingId(id)
-    try {
-      await api.patch(`/payments/${id}/status`, { status: 'paid' })
-      setPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'paid' } : p))
-      setSummary(prev => ({ ...prev, paid: prev.paid + 500, pending: prev.pending - 500 }))
-    } catch {
-      alert('Failed to update payment')
-    } finally {
-      setUpdatingId(null)
-    }
+  setUpdatingId(id)
+  try {
+    await api.patch(`/payments/${id}/status`, { status: 'paid' })
+    await fetchData()
+  } catch {
+    alert('Failed to update payment')
+  } finally {
+    setUpdatingId(null)
   }
+}
 
   const filtered = filter === 'all' ? payments : payments.filter(p => p.status === filter)
   const paidRate = summary.total ? Math.round((summary.paid / summary.total) * 100) : 0
