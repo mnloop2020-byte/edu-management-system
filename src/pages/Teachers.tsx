@@ -37,7 +37,7 @@ export default function Teachers() {
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ name: '', subject: '', phone: '' })
+  const [form, setForm] = useState({ name: '', subject: '', phone: '', classes: '0' })
   const [editId, setEditId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -54,13 +54,13 @@ export default function Teachers() {
   }
 
   function openAdd() {
-    setForm({ name: '', subject: '', phone: '' })
+    setForm({ name: '', subject: '', phone: '', classes: '0' })
     setEditId(null)
     setShowModal(true)
   }
 
   function openEdit(t: Teacher) {
-    setForm({ name: t.name, subject: t.subject, phone: t.phone || '' })
+    setForm({ name: t.name, subject: t.subject, phone: t.phone || '', classes: String(t.classes) })
     setEditId(t.id)
     setShowModal(true)
   }
@@ -69,10 +69,16 @@ export default function Teachers() {
     if (!form.name || !form.subject) return
     setSaving(true)
     try {
+      const payload = {
+        name: form.name,
+        subject: form.subject,
+        phone: form.phone,
+        classes: Number(form.classes),
+      }
       if (editId !== null) {
-        await api.put(`/teachers/${editId}`, form)
+        await api.put(`/teachers/${editId}`, payload)
       } else {
-        await api.post('/teachers', form)
+        await api.post('/teachers', payload)
       }
       await fetchTeachers()
       setShowModal(false)
@@ -111,7 +117,6 @@ export default function Teachers() {
         </button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: 'Total Teachers', value: teachers.length, color: 'text-white' },
@@ -125,7 +130,6 @@ export default function Teachers() {
         ))}
       </div>
 
-      {/* Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {teachers.map((t, i) => (
           <div key={t.id} className="bg-[#111318] border border-white/[0.06] rounded-2xl p-5 hover:border-white/[0.1] transition-colors">
@@ -171,7 +175,6 @@ export default function Teachers() {
         )}
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
           <div className="bg-[#111318] border border-white/[0.08] rounded-2xl w-[400px] shadow-2xl">
@@ -185,6 +188,7 @@ export default function Teachers() {
               <InputField label="Full Name *" value={form.name} onChange={v => setForm({ ...form, name: v })} placeholder="Teacher name" />
               <InputField label="Subject *" value={form.subject} onChange={v => setForm({ ...form, subject: v })} placeholder="e.g. Mathematics" />
               <InputField label="Phone" value={form.phone} onChange={v => setForm({ ...form, phone: v })} placeholder="05xxxxxxxx" />
+              <InputField label="Number of Classes" type="number" value={form.classes} onChange={v => setForm({ ...form, classes: v })} placeholder="0" />
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/[0.06]">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] text-white/50 border border-white/[0.08] rounded-xl">Cancel</button>
