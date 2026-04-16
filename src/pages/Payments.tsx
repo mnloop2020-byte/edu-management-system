@@ -31,6 +31,13 @@ interface Summary {
   overdue: number
 }
 
+interface Transaction {
+  id: number
+  amount: number
+  note: string | null
+  date: string
+}
+
 const avatarColors = [
   'from-violet-500 to-indigo-600', 'from-blue-500 to-cyan-600',
   'from-emerald-500 to-teal-600', 'from-amber-400 to-orange-500',
@@ -60,20 +67,23 @@ export default function Payments() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'paid' | 'partial' | 'pending' | 'overdue'>('all')
 
-  // Add Payment Modal
   const [showModal, setShowModal] = useState(false)
   const [students, setStudents] = useState<Student[]>([])
-  const [form, setForm] = useState({ studentId: '', paidAmount: '', dueDate: '' })
+  const [form, setForm] = useState({ studentId: '', paidAmount: '', dueDate: '', payDate: '' })
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
-  // Partial Payment Modal
   const [partialModal, setPartialModal] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
   const [partialAmount, setPartialAmount] = useState('')
+  const [partialDate, setPartialDate] = useState('')
   const [partialSaving, setPartialSaving] = useState(false)
 
-  // Edit Annual Fee
+  const [txModal, setTxModal] = useState(false)
+  const [txPayment, setTxPayment] = useState<Payment | null>(null)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [txLoading, setTxLoading] = useState(false)
+
   const [editFee, setEditFee] = useState(false)
   const [newFee, setNewFee] = useState('')
   const [feeSaving, setFeeSaving] = useState(false)
@@ -94,8 +104,32 @@ export default function Payments() {
     }
   }
 
+  async function openTransactions(p: Payment) {
+    setTxPayment(p)
+    setTxModal(true)
+    setTxLoading(true)
+    try {
+      const res = await api.get(`/payments/${p.id}/transactions`)
+      setTransactions(res.data.transactions)
+    } catch {
+      setTransactions([])
+    } finally {
+      setTxLoading(false)
+    }
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm('هل أنت متأكد من حذف هذا السجل؟')) return
+    try {
+      await api.delete(`/payments/${id}`)
+      fetchData()
+    } catch {
+      alert('فشل في الحذف')
+    }
+  }
+
   async function openModal() {
-    setForm({ studentId: '', paidAmount: '', dueDate: '' })
+    setForm({ studentId: '', paidAmount: '', dueDate: '', payDate: '' })
     setFormError('')
     setShowModal(true)
     if (students.length === 0) {
@@ -115,6 +149,7 @@ export default function Payments() {
         studentId: Number(form.studentId),
         paidAmount: Number(form.paidAmount),
         dueDate: form.dueDate || null,
+        payDate: form.payDate || null,
       })
       setShowModal(false)
       fetchData()
@@ -129,9 +164,13 @@ export default function Payments() {
     if (!partialAmount || !selectedPayment) return
     setPartialSaving(true)
     try {
-      await api.patch(`/payments/${selectedPayment.id}/pay`, { amount: Number(partialAmount) })
+      await api.patch(`/payments/${selectedPayment.id}/pay`, {
+        amount: Number(partialAmount),
+        date: partialDate || null,
+      })
       setPartialModal(false)
       setPartialAmount('')
+      setPartialDate('')
       fetchData()
     } catch {
       alert('فشل في إضافة الدفع')
@@ -174,13 +213,9 @@ export default function Payments() {
           <p className="text-[11px] text-white/35 mb-1">الرسوم السنوية</p>
           {editFee ? (
             <div className="flex items-center gap-2">
-              <input
-                type="number"
-                value={newFee}
-                onChange={e => setNewFee(e.target.value)}
+              <input type="number" value={newFee} onChange={e => setNewFee(e.target.value)}
                 placeholder={String(summary.annualFee)}
-                className="bg-white/[0.06] border border-white/[0.1] rounded-lg px-3 py-1.5 text-[14px] text-white/80 outline-none focus:border-violet-500/50 w-36"
-              />
+                className="bg-white/[0.06] border border-white/[0.1] rounded-lg px-3 py-1.5 text-[14px] text-white/80 outline-none focus:border-violet-500/50 w-36" />
               <span className="text-[13px] text-white/40">ريال</span>
               <button onClick={handleUpdateFee} disabled={feeSaving}
                 className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-[12px] rounded-lg disabled:opacity-50 transition-colors">
@@ -211,10 +246,10 @@ export default function Payments() {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: 'إجمالي الرسوم', value: `${summary.total.toLocaleString()}`, sub: 'ريال', color: 'text-white' },
-          { label: 'المحصّل',        value: `${summary.paid.toLocaleString()}`,  sub: `${collectionRate}%`, color: 'text-emerald-400' },
-          { label: 'المتبقي',        value: `${summary.remaining.toLocaleString()}`, sub: 'ريال', color: 'text-red-400' },
-          { label: 'دفع جزئي',      value: summary.partial, sub: 'طلاب', color: 'text-blue-400' },
+          { label: 'إجمالي الرسوم', value: `${summary.total.toLocaleString()}`,     sub: 'ريال',   color: 'text-white' },
+          { label: 'المحصّل',        value: `${summary.paid.toLocaleString()}`,      sub: `${collectionRate}%`, color: 'text-emerald-400' },
+          { label: 'المتبقي',        value: `${summary.remaining.toLocaleString()}`, sub: 'ريال',   color: 'text-red-400' },
+          { label: 'دفع جزئي',      value: summary.partial,                         sub: 'طلاب',   color: 'text-blue-400' },
         ].map(item => (
           <div key={item.label} className="bg-[#111318] border border-white/[0.06] rounded-2xl px-5 py-4">
             <p className="text-[11px] text-white/35 mb-1">{item.label}</p>
@@ -273,13 +308,14 @@ export default function Payments() {
               const badge = statusBadge(p.status)
               return (
                 <tr key={p.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-3">
+                  {/* ✅ الضغط على الطالب يفتح سجل الدفعات */}
+                  <td className="px-5 py-3.5 cursor-pointer" onClick={() => openTransactions(p)}>
+                    <div className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                       <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${avatarColors[i % avatarColors.length]} flex items-center justify-center text-[10px] font-bold text-white shrink-0`}>
                         {getInitials(p.student.name)}
                       </div>
-                      <div>
-                        <p className="text-[13px] text-white/85 font-medium">{p.student.name}</p>
+                      <div className="text-right">
+                        <p className="text-[13px] text-violet-400 font-medium">{p.student.name}</p>
                         <p className="text-[11px] text-white/30">{p.student.course}</p>
                       </div>
                     </div>
@@ -289,12 +325,10 @@ export default function Payments() {
                     <span className="text-[11px] text-white/25 ml-1">ريال</span>
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <div>
-                      <span className="text-[13px] font-semibold text-white/80">{p.paidAmount.toLocaleString()}</span>
-                      <span className="text-[11px] text-white/25 ml-1">ريال</span>
-                      <div className="h-1 bg-white/[0.04] rounded-full mt-1 w-20 ml-auto">
-                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${p.percentage}%` }} />
-                      </div>
+                    <span className="text-[13px] font-semibold text-white/80">{p.paidAmount.toLocaleString()}</span>
+                    <span className="text-[11px] text-white/25 ml-1">ريال</span>
+                    <div className="h-1 bg-white/[0.04] rounded-full mt-1 w-20 ml-auto">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${p.percentage}%` }} />
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-right">
@@ -314,14 +348,25 @@ export default function Payments() {
                       <span className={`text-[12px] font-medium ${badge.text}`}>{badge.label}</span>
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-right">
-                    {p.status !== 'paid' && (
-                      <button
-                        onClick={() => { setSelectedPayment(p); setPartialAmount(''); setPartialModal(true) }}
-                        className="text-[11px] px-3 py-1.5 rounded-lg border border-white/[0.08] text-white/40 hover:text-violet-400 hover:border-violet-500/30 transition-colors">
-                        إضافة دفع
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5 justify-end">
+                      {p.status !== 'paid' && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setSelectedPayment(p); setPartialAmount(''); setPartialDate(''); setPartialModal(true) }}
+                          className="text-[11px] px-3 py-1.5 rounded-lg border border-white/[0.08] text-white/40 hover:text-violet-400 hover:border-violet-500/30 transition-colors">
+                          إضافة دفع
+                        </button>
+                      )}
+                      <button onClick={e => { e.stopPropagation(); handleDelete(p.id) }}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6l-1 14H6L5 6"/>
+                          <path d="M10 11v6M14 11v6"/>
+                          <path d="M9 6V4h6v2"/>
+                        </svg>
                       </button>
-                    )}
+                    </div>
                   </td>
                 </tr>
               )
@@ -332,6 +377,82 @@ export default function Payments() {
           </tbody>
         </table>
       </div>
+
+      {/* Transactions Modal */}
+      {txModal && txPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#111318] border border-white/[0.08] rounded-2xl w-full max-w-md shadow-2xl flex flex-col" style={{ maxHeight: '80vh' }}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-[11px] font-bold text-white">
+                  {getInitials(txPayment.student.name)}
+                </div>
+                <div>
+                  <p className="text-[14px] font-semibold text-white">{txPayment.student.name}</p>
+                  <p className="text-[11px] text-white/35">{txPayment.student.course}</p>
+                </div>
+              </div>
+              <button onClick={() => setTxModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-white/80 hover:bg-white/[0.06]">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 p-4 shrink-0">
+              {[
+                { label: 'الإجمالي', value: txPayment.totalAmount.toLocaleString(), color: 'text-white' },
+                { label: 'المدفوع',  value: txPayment.paidAmount.toLocaleString(),  color: 'text-emerald-400' },
+                { label: 'المتبقي',  value: txPayment.remaining.toLocaleString(),   color: txPayment.remaining > 0 ? 'text-red-400' : 'text-emerald-400' },
+              ].map(s => (
+                <div key={s.label} className="bg-white/[0.03] rounded-xl px-3 py-2.5 text-center">
+                  <p className="text-[11px] text-white/35 mb-1">{s.label}</p>
+                  <p className={`text-[15px] font-bold ${s.color}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+              <p className="text-[11px] text-white/35 mb-3 font-medium">سجل الدفعات</p>
+              {txLoading ? (
+                <div className="flex justify-center py-8">
+                  <svg className="animate-spin text-violet-500" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                </div>
+              ) : transactions.length === 0 ? (
+                <p className="text-center py-8 text-[13px] text-white/25">لا توجد دفعات مسجلة</p>
+              ) : (
+                <div className="space-y-2">
+                  {transactions.map((tx, i) => (
+                    <div key={tx.id} className="flex items-center justify-between bg-white/[0.03] border border-white/[0.05] rounded-xl px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+                          <span className="text-[10px] text-emerald-400 font-bold">{i + 1}</span>
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-semibold text-emerald-400">+{tx.amount.toLocaleString()} ريال</p>
+                          {tx.note && <p className="text-[11px] text-white/35">{tx.note}</p>}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-white/30">
+                        {new Date(tx.date).toLocaleDateString('ar-SA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-white/[0.06] shrink-0">
+              <button onClick={() => setTxModal(false)}
+                className="w-full py-2.5 rounded-xl border border-white/[0.08] text-[13px] text-white/40 hover:text-white/60 transition-colors">
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Payment Modal */}
       {showModal && (
@@ -345,55 +466,47 @@ export default function Payments() {
                 </svg>
               </button>
             </div>
-
             {formError && (
               <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-4">
                 <p className="text-[12px] text-red-400">{formError}</p>
               </div>
             )}
-
             <div className="flex flex-col gap-4">
               <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl px-4 py-3">
-                <p className="text-[12px] text-violet-300">
-                  الرسوم السنوية: <span className="font-bold">{summary.annualFee.toLocaleString()} ريال</span>
-                </p>
+                <p className="text-[12px] text-violet-300">الرسوم السنوية: <span className="font-bold">{summary.annualFee.toLocaleString()} ريال</span></p>
               </div>
-
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-medium text-white/40">الطالب</label>
                 <select value={form.studentId} onChange={e => setForm({ ...form, studentId: e.target.value })}
                   className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50">
                   <option value="" disabled className="bg-[#111318]">اختر طالباً...</option>
-                  {students.map(s => (
-                    <option key={s.id} value={s.id} className="bg-[#111318]">{s.name} — {s.course}</option>
-                  ))}
+                  {students.map(s => <option key={s.id} value={s.id} className="bg-[#111318]">{s.name} — {s.course}</option>)}
                 </select>
               </div>
-
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-medium text-white/40">المبلغ المدفوع (ريال)</label>
                 <input type="number" value={form.paidAmount} onChange={e => setForm({ ...form, paidAmount: e.target.value })}
                   placeholder="0"
                   className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
                 {form.paidAmount && (
-                  <p className="text-[11px] text-white/30">
-                    المتبقي: {(summary.annualFee - Number(form.paidAmount)).toLocaleString()} ريال
-                  </p>
+                  <p className="text-[11px] text-white/30">المتبقي: {(summary.annualFee - Number(form.paidAmount)).toLocaleString()} ريال</p>
                 )}
               </div>
-
+              {/* ✅ تاريخ الدفع */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-medium text-white/40">تاريخ الدفع (اختياري)</label>
+                <input type="date" value={form.payDate} onChange={e => setForm({ ...form, payDate: e.target.value })}
+                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
+              </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-medium text-white/40">تاريخ استحقاق الباقي (اختياري)</label>
                 <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })}
                   className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
               </div>
             </div>
-
             <div className="flex gap-2 mt-6">
               <button onClick={() => setShowModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-[13px] text-white/40 hover:text-white/60 transition-colors">
-                إلغاء
-              </button>
+                className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-[13px] text-white/40 hover:text-white/60 transition-colors">إلغاء</button>
               <button onClick={handleAddPayment} disabled={saving}
                 className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-[13px] font-medium text-white transition-colors">
                 {saving ? 'جاري الحفظ...' : 'إضافة'}
@@ -415,29 +528,30 @@ export default function Payments() {
                 </svg>
               </button>
             </div>
-
             <div className="bg-white/[0.03] rounded-xl p-4 mb-4">
               <p className="text-[13px] font-medium text-white/80">{selectedPayment.student.name}</p>
-              <p className="text-[11px] text-white/35 mt-1">
-                المتبقي: <span className="text-red-400 font-semibold">{selectedPayment.remaining.toLocaleString()} ريال</span>
-              </p>
+              <p className="text-[11px] text-white/35 mt-1">المتبقي: <span className="text-red-400 font-semibold">{selectedPayment.remaining.toLocaleString()} ريال</span></p>
             </div>
-
-            <div className="flex flex-col gap-1.5 mb-5">
-              <label className="text-[11px] font-medium text-white/40">المبلغ المدفوع الآن (ريال)</label>
-              <input type="number" value={partialAmount} onChange={e => setPartialAmount(e.target.value)}
-                placeholder="0" max={selectedPayment.remaining}
-                className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
-              {partialAmount && Number(partialAmount) >= selectedPayment.remaining && (
-                <p className="text-[11px] text-emerald-400">✓ سيتم تسجيل الدفع كاملاً</p>
-              )}
+            <div className="flex flex-col gap-3 mb-5">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-medium text-white/40">المبلغ المدفوع الآن (ريال)</label>
+                <input type="number" value={partialAmount} onChange={e => setPartialAmount(e.target.value)}
+                  placeholder="0" max={selectedPayment.remaining}
+                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
+                {partialAmount && Number(partialAmount) >= selectedPayment.remaining && (
+                  <p className="text-[11px] text-emerald-400">✓ سيتم تسجيل الدفع كاملاً</p>
+                )}
+              </div>
+              {/* ✅ تاريخ الدفع */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-medium text-white/40">تاريخ الدفع (اختياري)</label>
+                <input type="date" value={partialDate} onChange={e => setPartialDate(e.target.value)}
+                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
+              </div>
             </div>
-
             <div className="flex gap-2">
               <button onClick={() => setPartialModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-[13px] text-white/40 hover:text-white/60 transition-colors">
-                إلغاء
-              </button>
+                className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-[13px] text-white/40 hover:text-white/60 transition-colors">إلغاء</button>
               <button onClick={handlePartialPay} disabled={partialSaving}
                 className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-[13px] font-medium text-white transition-colors">
                 {partialSaving ? 'جاري...' : 'تأكيد'}
@@ -446,6 +560,7 @@ export default function Payments() {
           </div>
         </div>
       )}
+
     </div>
   )
 }

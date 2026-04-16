@@ -26,6 +26,8 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState<Stats>({ students: 0, teachers: 0, attendanceRate: 0, pendingPayments: 0 })
   const [recentStudents, setRecentStudents] = useState<any[]>([])
+  const [weekData, setWeekData] = useState<any[]>([])
+  const [trendData, setTrendData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -35,28 +37,12 @@ export default function Dashboard() {
     try {
       setLoading(true)
       setError('')
-      const [studentsRes, teachersRes, attendanceRes, paymentsRes] = await Promise.all([
-        api.get('/students'),
-        api.get('/teachers'),
-        api.get('/attendance/summary'),
-        api.get('/payments?status=pending'),
-      ])
+      const res = await api.get('/dashboard')
+      setStats(res.data.stats ?? { students: 0, teachers: 0, attendanceRate: 0, pendingPayments: 0 })
+      setRecentStudents(res.data.recentStudents ?? [])
+      setWeekData(res.data.weekly ?? [])
+      setTrendData(res.data.trend ?? [])
 
-      const students = studentsRes.data.students ?? []
-      const teachers = teachersRes.data.teachers ?? []
-      const summary  = attendanceRes.data.summary ?? {}
-      const payments = paymentsRes.data.payments ?? []
-
-      setStats({
-        students: students.length,
-        teachers: teachers.length,
-        attendanceRate: summary.totalStudents
-          ? Math.round((summary.present / summary.totalStudents) * 100)
-          : 0,
-        pendingPayments: payments.length,
-      })
-
-      setRecentStudents(students.slice(0, 4))
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load dashboard data')
     } finally {
@@ -76,30 +62,19 @@ export default function Dashboard() {
   }
 
   const statCards = [
-    { title: 'Total Students',   value: stats.students,            accent: 'text-violet-400 bg-violet-500/10',
+    { title: 'Total Students',   value: stats.students,             accent: 'text-violet-400 bg-violet-500/10',
       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg> },
-    { title: 'Total Teachers',   value: stats.teachers,            accent: 'text-blue-400 bg-blue-500/10',
+    { title: 'Total Teachers',   value: stats.teachers,             accent: 'text-blue-400 bg-blue-500/10',
       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> },
     { title: 'Attendance Today', value: `${stats.attendanceRate}%`, accent: 'text-emerald-400 bg-emerald-500/10',
       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> },
-    { title: 'Pending Payments', value: stats.pendingPayments,     accent: 'text-red-400 bg-red-500/10',
+    { title: 'Pending Payments', value: stats.pendingPayments,      accent: 'text-red-400 bg-red-500/10',
       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg> },
-  ]
-
-  const weekData = [
-    { day: 'Sat', students: 110 }, { day: 'Sun', students: 118 },
-    { day: 'Mon', students: 105 }, { day: 'Tue', students: 120 }, { day: 'Wed', students: 115 },
-  ]
-
-  const trendData = [
-    { month: 'Sep', value: 80 }, { month: 'Oct', value: 90 }, { month: 'Nov', value: 95 },
-    { month: 'Dec', value: 88 }, { month: 'Jan', value: 100 }, { month: 'Feb', value: stats.students || 124 },
   ]
 
   return (
     <div className="space-y-5">
 
-      {/* Error Banner */}
       {error && (
         <div className="flex items-center gap-2.5 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" className="shrink-0">
@@ -110,7 +85,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Stat Cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         {statCards.map(stat => (
           <div key={stat.title} className="bg-[#111318] border border-white/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:border-white/[0.1] transition-colors">
@@ -129,7 +103,6 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className="xl:col-span-2 bg-[#111318] border border-white/[0.06] rounded-2xl p-5">
           <div className="flex items-center justify-between mb-5">
@@ -142,7 +115,7 @@ export default function Dashboard() {
             <BarChart data={weekData} barSize={28}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
               <XAxis dataKey="day" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} domain={[90, 125]} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
               <Bar dataKey="students" fill="#7c3aed" radius={[6, 6, 0, 0]} />
             </BarChart>
@@ -174,14 +147,12 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Recent Students */}
       <div className="bg-[#111318] border border-white/[0.06] rounded-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <div>
             <h2 className="text-[14px] font-semibold text-white">Recent Students</h2>
             <p className="text-[11px] text-white/35 mt-0.5">Latest enrollments</p>
           </div>
-          {/* استخدام navigate بدل <a> لتجنب reload */}
           <button
             onClick={() => navigate('/students')}
             className="text-[12px] text-violet-400 hover:text-violet-300 transition-colors font-medium"

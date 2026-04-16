@@ -32,19 +32,20 @@ export default function Reports() {
   async function fetchAll() {
     try {
       setLoading(true)
-      const [studentsRes, teachersRes, paymentsRes, attendanceRes] = await Promise.all([
+      const [studentsRes, teachersRes, paymentsRes, attendanceRes, weekRes] = await Promise.all([
         api.get('/students'),
         api.get('/teachers'),
         api.get('/payments'),
         api.get('/attendance/summary'),
+        api.get('/attendance/weekly'),
       ])
 
       const students: any[] = studentsRes.data.students
       const teachers: any[] = teachersRes.data.teachers
       const payments: any[] = paymentsRes.data.payments
       const att = attendanceRes.data.summary
+      const weekly: any[] = weekRes.data.weekly ?? []
 
-      // Summary stats
       const activeCount = students.filter(s => s.status === 'Active').length
       const paidCount   = payments.filter(p => p.status === 'paid').length
       const payRate     = payments.length ? Math.round((paidCount / payments.length) * 100) : 0
@@ -58,15 +59,11 @@ export default function Reports() {
         { label: 'Active Students', value: `${activeRate}%`,        sub: `${activeCount} of ${students.length}`, positive: activeRate >= 80 },
       ])
 
-      // Attendance chart
-      setAttendanceData([
-        { month: 'Jan', present: Math.max(0, att.present - 8), absent: att.absent + 4 },
-        { month: 'Feb', present: Math.max(0, att.present - 3), absent: att.absent + 2 },
-        { month: 'Mar', present: att.present + 5,              absent: Math.max(0, att.absent - 2) },
-        { month: 'Apr', present: att.present,                  absent: att.absent },
-      ])
+      setAttendanceData(weekly.map((w: any) => ({
+        month: w.day,
+        present: w.students,
+      })))
 
-      // Payment pie
       const pending = payments.filter(p => p.status === 'pending').length
       const overdue = payments.filter(p => p.status === 'overdue').length
       setPaymentData([
@@ -75,7 +72,6 @@ export default function Reports() {
         { name: 'Overdue', value: overdue,   color: '#f87171' },
       ].filter(d => d.value > 0))
 
-      // Grade distribution
       const buckets: Record<string, number> = { 'A+/A': 0, 'A−/B+': 0, 'B/B−': 0, 'C & below': 0 }
       students.forEach(s => {
         const g = s.grade || ''
@@ -86,12 +82,13 @@ export default function Reports() {
       })
       setGradeData(Object.entries(buckets).filter(([, v]) => v > 0).map(([grade, count]) => ({ grade, count })))
 
-      // Insights
       const ins = []
       if (attRate >= 90)
         ins.push({ icon: '↑', color: 'text-emerald-400 bg-emerald-500/10', text: `Attendance is strong at ${attRate}% today` })
-      else
+      else if (attRate > 0)
         ins.push({ icon: '!', color: 'text-amber-400 bg-amber-500/10', text: `Attendance is ${attRate}% — below the 90% target` })
+      else
+        ins.push({ icon: '!', color: 'text-amber-400 bg-amber-500/10', text: 'No attendance recorded today yet' })
       if (overdue > 0)
         ins.push({ icon: '!', color: 'text-red-400 bg-red-500/10', text: `${overdue} overdue payment${overdue > 1 ? 's' : ''} need immediate follow-up` })
       if (pending > 0)
@@ -120,8 +117,6 @@ export default function Reports() {
 
   return (
     <div className="space-y-5">
-
-      {/* Summary */}
       <div className="grid grid-cols-4 gap-3">
         {summaryStats.map(s => (
           <div key={s.label} className="bg-[#111318] border border-white/[0.06] rounded-2xl px-5 py-4">
@@ -132,21 +127,19 @@ export default function Reports() {
         ))}
       </div>
 
-      {/* Charts row */}
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2 bg-[#111318] border border-white/[0.06] rounded-2xl p-5">
           <div className="mb-5">
-            <h2 className="text-[14px] font-semibold text-white">Monthly Attendance</h2>
-            <p className="text-[11px] text-white/35 mt-0.5">Present vs Absent per month</p>
+            <h2 className="text-[14px] font-semibold text-white">Weekly Attendance</h2>
+            <p className="text-[11px] text-white/35 mt-0.5">Students present per day</p>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={attendanceData} barSize={18} barGap={4}>
+            <BarChart data={attendanceData} barSize={18}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
               <XAxis dataKey="month" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.02)' }} />
               <Bar dataKey="present" fill="#7c3aed" radius={[5, 5, 0, 0]} name="Present" />
-              <Bar dataKey="absent"  fill="#ef4444" radius={[5, 5, 0, 0]} name="Absent" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -186,7 +179,6 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Bottom row */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-[#111318] border border-white/[0.06] rounded-2xl p-5">
           <div className="mb-5">
@@ -227,7 +219,6 @@ export default function Reports() {
           </div>
         </div>
       </div>
-
     </div>
   )
 }

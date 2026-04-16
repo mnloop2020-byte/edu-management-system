@@ -24,7 +24,6 @@ export default function Register() {
         name: form.name,
         email: form.email,
         password: form.password,
-        role: 'ADMIN',
       })
       navigate('/login')
     } catch (err: any) {

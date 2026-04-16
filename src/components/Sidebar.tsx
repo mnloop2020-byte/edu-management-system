@@ -23,15 +23,11 @@ export default function Sidebar() {
   useEffect(() => {
     async function fetchCounts() {
       try {
-        const [studentsRes, teachersRes, paymentsRes] = await Promise.all([
-          api.get('/students'),
-          api.get('/teachers'),
-          api.get('/payments?status=pending'),
-        ])
+        const res = await api.get('/dashboard')
         setCounts({
-          students: studentsRes.data.students.length,
-          teachers: teachersRes.data.teachers.length,
-          payments: paymentsRes.data.payments.length,
+          students: res.data.stats?.students ?? 0,
+          teachers: res.data.stats?.teachers ?? 0,
+          payments: res.data.stats?.pendingPayments ?? 0,
         })
       } catch {
         // silently fail
