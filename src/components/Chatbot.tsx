@@ -6,10 +6,12 @@ interface Message {
   content: string
 }
 
+const starterPrompts = ['كم عدد الطلاب؟', 'ملخص المدفوعات', 'من غاب اليوم؟', 'أداء الفصل']
+
 export default function Chatbot() {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: 'مرحباً! أنا مساعدك الذكي. يمكنني الإجابة على أي سؤال عن الطلاب، الحضور، المدفوعات، والمعلمين. كيف يمكنني مساعدتك؟' }
+    { role: 'assistant', content: 'مرحباً! أنا مساعدك الذكي. يمكنني الإجابة على أي سؤال عن الطلاب والحضور والمدفوعات والمعلمين. كيف يمكنني مساعدتك؟' },
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -28,8 +30,7 @@ export default function Chatbot() {
     setLoading(true)
 
     try {
-      const history = messages.slice(1).map(m => ({ role: m.role, content: m.content }))
-
+      const history = messages.slice(1).map(message => ({ role: message.role, content: message.content }))
       const res = await api.post('/ai/chat', {
         message: userMsg.content,
         history,
@@ -45,7 +46,6 @@ export default function Chatbot() {
 
   return (
     <>
-      {/* Floating Button */}
       <button
         onClick={() => setOpen(prev => !prev)}
         className="fixed bottom-6 right-6 z-50 w-[52px] h-[52px] rounded-2xl bg-violet-600 hover:bg-violet-500 shadow-lg shadow-violet-500/30 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
@@ -61,13 +61,11 @@ export default function Chatbot() {
         )}
       </button>
 
-      {/* Chat Window */}
       {open && (
         <div
           className="fixed bottom-24 right-6 z-50 w-[360px] bg-[#111318] border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
           style={{ height: '480px' }}
         >
-          {/* Header */}
           <div className="px-4 py-3.5 border-b border-white/[0.06] flex items-center gap-3 shrink-0">
             <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2">
@@ -84,16 +82,18 @@ export default function Chatbot() {
             </div>
           </div>
 
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-[13px] leading-6 ${
-                  msg.role === 'user'
-                    ? 'bg-violet-600 text-white rounded-br-sm'
-                    : 'bg-white/[0.05] text-white/80 rounded-bl-sm'
-                }`} dir="rtl">
-                  {msg.content}
+            {messages.map((message, index) => (
+              <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-[13px] leading-6 ${
+                    message.role === 'user'
+                      ? 'bg-violet-600 text-white rounded-br-sm'
+                      : 'bg-white/[0.05] text-white/80 rounded-bl-sm'
+                  }`}
+                  dir="rtl"
+                >
+                  {message.content}
                 </div>
               </div>
             ))}
@@ -110,19 +110,20 @@ export default function Chatbot() {
             <div ref={bottomRef} />
           </div>
 
-          {/* Quick suggestions */}
           {messages.length === 1 && (
             <div className="px-4 pb-2 flex flex-wrap gap-1.5 shrink-0">
-              {['كم عدد الطلاب؟', 'ملخص المدفوعات', 'من غاب اليوم؟', 'أداء الفصل'].map(s => (
-                <button key={s} onClick={() => setInput(s)}
-                  className="text-[11px] px-2.5 py-1 rounded-lg border border-white/[0.08] text-white/40 hover:text-violet-400 hover:border-violet-500/30 transition-colors">
-                  {s}
+              {starterPrompts.map(prompt => (
+                <button
+                  key={prompt}
+                  onClick={() => setInput(prompt)}
+                  className="text-[11px] px-2.5 py-1 rounded-lg border border-white/[0.08] text-white/40 hover:text-violet-400 hover:border-violet-500/30 transition-colors"
+                >
+                  {prompt}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Input */}
           <div className="px-3 py-3 border-t border-white/[0.06] flex items-center gap-2 shrink-0">
             <input
               value={input}

@@ -1,10 +1,34 @@
 import { useState } from 'react'
+import { isAxiosError } from 'axios'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/api'
 
+interface RegisterForm {
+  name: string
+  email: string
+  password: string
+  confirmPassword: string
+}
+
+type RegisterFieldKey = keyof RegisterForm
+
+interface RegisterField {
+  label: string
+  key: RegisterFieldKey
+  type: string
+  placeholder: string
+}
+
+const fields: RegisterField[] = [
+  { label: 'الاسم الكامل', key: 'name', type: 'text', placeholder: 'محمد أحمد' },
+  { label: 'البريد الإلكتروني', key: 'email', type: 'email', placeholder: 'example@email.com' },
+  { label: 'كلمة المرور', key: 'password', type: 'password', placeholder: '********' },
+  { label: 'تأكيد كلمة المرور', key: 'confirmPassword', type: 'password', placeholder: '********' },
+]
+
 export default function Register() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' })
+  const [form, setForm] = useState<RegisterForm>({ name: '', email: '', password: '', confirmPassword: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -13,12 +37,15 @@ export default function Register() {
       setError('جميع الحقول مطلوبة')
       return
     }
+
     if (form.password !== form.confirmPassword) {
       setError('كلمة المرور غير متطابقة')
       return
     }
+
     setLoading(true)
     setError('')
+
     try {
       await api.post('/auth/register', {
         name: form.name,
@@ -26,8 +53,12 @@ export default function Register() {
         password: form.password,
       })
       navigate('/login')
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'فشل إنشاء الحساب')
+    } catch (err: unknown) {
+      setError(
+        isAxiosError(err)
+          ? err.response?.data?.message || 'فشل إنشاء الحساب'
+          : 'فشل إنشاء الحساب'
+      )
     } finally {
       setLoading(false)
     }
@@ -36,8 +67,6 @@ export default function Register() {
   return (
     <div className="min-h-screen bg-[#0D0F14] flex items-center justify-center px-4">
       <div className="w-full max-w-[380px]">
-
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center mb-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
@@ -49,28 +78,21 @@ export default function Register() {
           <p className="text-[12px] text-white/35 mt-1">إنشاء حساب جديد</p>
         </div>
 
-        {/* Card */}
         <div className="bg-[#111318] border border-white/[0.07] rounded-2xl p-6 flex flex-col gap-4">
-
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">
               <p className="text-[12px] text-red-400 text-center">{error}</p>
             </div>
           )}
 
-          {[
-            { label: 'الاسم الكامل', key: 'name', type: 'text', placeholder: 'محمد أحمد' },
-            { label: 'البريد الإلكتروني', key: 'email', type: 'email', placeholder: 'example@email.com' },
-            { label: 'كلمة المرور', key: 'password', type: 'password', placeholder: '••••••••' },
-            { label: 'تأكيد كلمة المرور', key: 'confirmPassword', type: 'password', placeholder: '••••••••' },
-          ].map(f => (
-            <div key={f.key} className="flex flex-col gap-1.5">
-              <label className="text-[11px] text-white/40 font-medium">{f.label}</label>
+          {fields.map((field) => (
+            <div key={field.key} className="flex flex-col gap-1.5">
+              <label className="text-[11px] text-white/40 font-medium">{field.label}</label>
               <input
-                type={f.type}
-                value={(form as any)[f.key]}
-                onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-                placeholder={f.placeholder}
+                type={field.type}
+                value={form[field.key]}
+                onChange={e => setForm({ ...form, [field.key]: e.target.value })}
+                placeholder={field.placeholder}
                 className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-[13px] text-white/80 placeholder:text-white/20 outline-none focus:border-violet-500/50 transition-colors"
               />
             </div>
@@ -81,9 +103,8 @@ export default function Register() {
             disabled={loading}
             className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 transition-colors text-white text-[13px] font-medium py-2.5 rounded-xl mt-1"
           >
-            {loading ? 'جاري الإنشاء...' : 'إنشاء حساب'}
+            {loading ? 'جارٍ الإنشاء...' : 'إنشاء حساب'}
           </button>
-
         </div>
 
         <p className="text-center text-[12px] text-white/30 mt-4">
@@ -92,7 +113,6 @@ export default function Register() {
             تسجيل الدخول
           </button>
         </p>
-
       </div>
     </div>
   )

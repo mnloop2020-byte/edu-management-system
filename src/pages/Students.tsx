@@ -1,360 +1,349 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../api/api'
+import { useAuth } from '../context/AuthContext'
+import { toast } from '../components/ui/Toast'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { Modal } from '../components/ui/Modal'
+import { SkeletonTable } from '../components/ui/Skeleton'
+import { EmptyState } from '../components/ui/EmptyState'
 
 interface Student {
-  id: number
-  name: string
-  course: string
-  grade: string | null
-  status: string
-  joinedAt: string
+  id: number; name: string; course: string
+  grade: string | null; status: string; joinedAt: string
 }
-
 interface Analysis {
   student: { id: number; name: string; course: string; grade: string | null; status: string }
-  stats: {
-    attendanceRate: number
-    presentCount: number
-    absentCount: number
-    lateCount: number
-    paidPayments: number
-    pendingPayments: number
-    overduePayments: number
-  }
+  stats: { attendanceRate: number; presentCount: number; absentCount: number; lateCount: number; paidPayments: number; pendingPayments: number; overduePayments: number }
   analysis: string
 }
 
-const avatarColors = [
-  'from-violet-500 to-indigo-600',
-  'from-blue-500 to-cyan-600',
-  'from-emerald-500 to-teal-600',
-  'from-amber-400 to-orange-500',
-  'from-pink-500 to-rose-600',
-  'from-teal-400 to-cyan-600',
+type StudentFormKey = 'name' | 'course' | 'grade'
+
+// Unsplash student photos
+const STUDENT_PHOTOS = [
+  'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=60&q=75',
+  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=60&q=75',
+  'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=60&q=75',
+  'https://images.unsplash.com/photo-1463453091185-61582044d556?w=60&q=75',
+  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=60&q=75',
+  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=60&q=75',
+  'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=60&q=75',
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=60&q=75',
+  'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=60&q=75',
+  'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=60&q=75',
 ]
 
+const ACCENT_COLORS = ['#7c3aed','#0284c7','#059669','#d97706','#db2777','#0891b2']
+
 const gradeStyle: Record<string, string> = {
-  'A+': 'text-emerald-400 bg-emerald-500/10',
-  'A':  'text-emerald-400 bg-emerald-500/10',
-  'A−': 'text-emerald-400 bg-emerald-500/10',
-  'B+': 'text-blue-400 bg-blue-500/10',
-  'B':  'text-blue-400 bg-blue-500/10',
-  'B−': 'text-blue-400 bg-blue-500/10',
-  'C+': 'text-amber-400 bg-amber-500/10',
-  'C':  'text-amber-400 bg-amber-500/10',
+  'A+':'badge-success','A':'badge-success','A−':'badge-success',
+  'B+':'badge-info','B':'badge-info','B−':'badge-info',
+  'C+':'badge-warning','C':'badge-warning',
 }
 
-const statusStyle: Record<string, { dot: string; text: string }> = {
-  'Active':    { dot: 'bg-emerald-400', text: 'text-emerald-400' },
-  'On Leave':  { dot: 'bg-amber-400',   text: 'text-amber-400' },
-  'Suspended': { dot: 'bg-red-400',     text: 'text-red-400' },
+const STATUS_COLORS: Record<string, { dot: string; text: string }> = {
+  'Active':    { dot: '#10b981', text: '#10b981' },
+  'On Leave':  { dot: '#fbbf24', text: '#fbbf24' },
+  'Suspended': { dot: '#f87171', text: '#f87171' },
 }
 
-const courses = ['All', 'Computer Science', 'Mathematics', 'Physics', 'Chemistry', 'Biology']
+const FILTERS = ['All', 'Active', 'On Leave', 'Suspended'] as const
 
 function getInitials(name: string) {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-function Spinner() {
+function StudentAvatar({ name, index }: { name: string; index: number }) {
+  const [err, setErr] = useState(false)
+  const color = ACCENT_COLORS[index % ACCENT_COLORS.length]
+  const photo = STUDENT_PHOTOS[index % STUDENT_PHOTOS.length]
+
+  if (!err) return (
+    <img src={photo} alt={name} onError={() => setErr(true)}
+      style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${color}30`, flexShrink: 0 }} />
+  )
   return (
-    <div className="flex items-center justify-center h-64">
-      <svg className="animate-spin text-violet-500" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-      </svg>
-    </div>
+    <div style={{
+      width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+      background: `${color}20`, border: `2px solid ${color}30`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 11, fontWeight: 700, color,
+    }}>{getInitials(name)}</div>
   )
 }
 
 export default function Students() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
+
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [courseFilter, setCourseFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
-  const [showModal, setShowModal] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ name: '', course: '', grade: '', status: 'Active' })
   const [saving, setSaving] = useState(false)
-
-  // AI Analysis
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [deleteName, setDeleteName] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const [analysisModal, setAnalysisModal] = useState(false)
   const [analysisData, setAnalysisData] = useState<Analysis | null>(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
 
-  useEffect(() => { fetchStudents() }, [])
+  const fetchStudents = useCallback(async () => {
+    try { setLoading(true); const res = await api.get('/students'); setStudents(res.data.students) }
+    catch { setError('Failed to load students') }
+    finally { setLoading(false) }
+  }, [])
 
-  async function fetchStudents() {
-    try {
-      setLoading(true)
-      const res = await api.get('/students')
-      setStudents(res.data.students)
-    } catch {
-      setError('Failed to load students')
-    } finally {
-      setLoading(false)
-    }
-  }
+  useEffect(() => { fetchStudents() }, [fetchStudents])
 
   async function handleAnalyze(id: number) {
-    setAnalysisData(null)
-    setAnalysisModal(true)
-    setAnalysisLoading(true)
-    try {
-      const res = await api.get(`/ai/analyze/${id}`)
-      setAnalysisData(res.data)
-    } catch {
-      alert('Failed to analyze student')
-      setAnalysisModal(false)
-    } finally {
-      setAnalysisLoading(false)
-    }
+    setAnalysisData(null); setAnalysisModal(true); setAnalysisLoading(true)
+    try { const res = await api.get(`/ai/analyze/${id}`); setAnalysisData(res.data) }
+    catch { toast.error('Failed to analyze student'); setAnalysisModal(false) }
+    finally { setAnalysisLoading(false) }
   }
 
   async function handleAdd() {
-    if (!form.name || !form.course) return
+    if (!isAdmin || !form.name || !form.course) return
     setSaving(true)
     try {
-      await api.post('/students', form)
-      await fetchStudents()
-      setShowModal(false)
-      setForm({ name: '', course: '', grade: '', status: 'Active' })
-    } catch {
-      alert('Failed to add student')
-    } finally {
-      setSaving(false)
-    }
+      await api.post('/students', form); await fetchStudents()
+      setShowAdd(false); setForm({ name: '', course: '', grade: '', status: 'Active' })
+      toast.success('Student added successfully!')
+    } catch { toast.error('Failed to add student') }
+    finally { setSaving(false) }
   }
 
-  async function handleDelete(id: number) {
-    if (!confirm('Delete this student?')) return
-    try {
-      await api.delete(`/students/${id}`)
-      setStudents(prev => prev.filter(s => s.id !== id))
-    } catch {
-      alert('Failed to delete student')
-    }
+  async function handleDelete() {
+    if (!deleteId) return
+    setDeleteLoading(true)
+    try { await api.delete(`/students/${deleteId}`); setStudents(prev => prev.filter(s => s.id !== deleteId)); toast.success('Student deleted.') }
+    catch { toast.error('Failed to delete student') }
+    finally { setDeleteLoading(false); setDeleteId(null) }
   }
 
-  const filtered = students.filter(s => {
-    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase())
-    const matchCourse = courseFilter === 'All' || s.course === courseFilter
-    const matchStatus = statusFilter === 'All' || s.status === statusFilter
-    return matchSearch && matchCourse && matchStatus
-  })
+  const filtered = students.filter(s =>
+    s.name.toLowerCase().includes(search.toLowerCase()) &&
+    (courseFilter === 'All' || s.course === courseFilter) &&
+    (statusFilter === 'All' || s.status === statusFilter)
+  )
+  const courseOptions = ['All', ...new Set(students.map(s => s.course).filter(Boolean))]
 
-  if (loading) return <Spinner />
-  if (error) return <div className="flex items-center justify-center h-64"><p className="text-red-400 text-[13px]">{error}</p></div>
+  const summaryStats = [
+    { label: 'Total', value: students.length, color: 'var(--text)' },
+    { label: 'Active', value: students.filter(s => s.status === 'Active').length, color: '#10b981' },
+    { label: 'On Leave', value: students.filter(s => s.status === 'On Leave').length, color: '#fbbf24' },
+    { label: 'Suspended', value: students.filter(s => s.status === 'Suspended').length, color: '#f87171' },
+  ]
+
+  const ADD_FIELDS: Array<{ label: string; key: StudentFormKey; placeholder: string }> = [
+    { label: 'Full Name *', key: 'name', placeholder: 'Student name' },
+    { label: 'Course *', key: 'course', placeholder: 'e.g. Mathematics' },
+    { label: 'Grade', key: 'grade', placeholder: 'e.g. A, B+' },
+  ]
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 animate-fade-in">
+      <ConfirmDialog open={deleteId !== null} title="Delete Student"
+        message={`Are you sure you want to delete "${deleteName}"? This action cannot be undone.`}
+        confirmLabel={deleteLoading ? 'Deleting...' : 'Delete'}
+        onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
+
+      <Modal open={showAdd && isAdmin} onClose={() => setShowAdd(false)} title="Add New Student"
+        icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>}
+        footer={
+          <div className="flex gap-2.5">
+            <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 text-[13px] btn-ghost rounded-xl">Cancel</button>
+            <button onClick={handleAdd} disabled={saving || !form.name || !form.course} className="flex-1 py-2.5 text-[13px] btn-primary rounded-xl">
+              {saving ? 'Adding...' : 'Add Student'}
+            </button>
+          </div>
+        }>
+        <div className="flex flex-col gap-4">
+          {ADD_FIELDS.map((f: { label: string; key: StudentFormKey; placeholder: string }) => (
+            <div key={f.key} className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold" style={{ color: 'var(--text-muted)' }}>{f.label}</label>
+              <input value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })}
+                placeholder={f.placeholder} className="input" />
+            </div>
+          ))}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12px] font-semibold" style={{ color: 'var(--text-muted)' }}>Status</label>
+            <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className="input">
+              {['Active', 'On Leave', 'Suspended'].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={analysisModal} onClose={() => setAnalysisModal(false)}
+        title={analysisData ? `Performance: ${analysisData.student.name}` : 'Analyzing...'}
+        subtitle="AI-powered student insights" maxWidth={580}
+        icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>}
+        footer={<button onClick={() => setAnalysisModal(false)} className="w-full py-2.5 text-[13px] btn-ghost rounded-xl">Close</button>}>
+        {analysisLoading ? (
+          <div className="flex flex-col items-center gap-3 py-12">
+            <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>Analyzing student data...</p>
+          </div>
+        ) : analysisData ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Attendance', value: `${analysisData.stats.attendanceRate}%`, color: '#10b981' },
+                { label: 'Paid', value: analysisData.stats.paidPayments, color: '#60a5fa' },
+                { label: 'Absences', value: analysisData.stats.absentCount, color: '#fbbf24' },
+              ].map(s => (
+                <div key={s.label} className="rounded-xl px-4 py-3 text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}>
+                  <p className="text-[22px] font-extrabold leading-none" style={{ color: s.color }}>{s.value}</p>
+                  <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-xl p-4" style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.15)' }}>
+              <p className="text-[11px] font-bold mb-2" style={{ color: '#a78bfa' }}>AI Analysis</p>
+              <div className="text-[13px] leading-7 whitespace-pre-wrap" dir="rtl" style={{ color: 'var(--text)', textAlign: 'right' }}>
+                {analysisData.analysis}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="bg-[#111318] border border-white/[0.06] rounded-xl px-4 py-2 flex items-center gap-2">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/30">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-faint)' }}>
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search students..."
-              className="bg-transparent text-[13px] text-white/80 placeholder:text-white/25 outline-none w-48" />
+              className="bg-transparent text-[13px] outline-none w-44" style={{ color: 'var(--text)', caretColor: 'var(--accent)' }} />
           </div>
           <select value={courseFilter} onChange={e => setCourseFilter(e.target.value)}
-            className="bg-[#111318] border border-white/[0.06] rounded-xl px-3 py-2 text-[13px] text-white/60 outline-none cursor-pointer">
-            {courses.map(c => <option key={c} value={c} className="bg-[#111318]">{c}</option>)}
+            className="rounded-xl px-3 py-2 text-[13px] outline-none cursor-pointer"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+            {courseOptions.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-            className="bg-[#111318] border border-white/[0.06] rounded-xl px-3 py-2 text-[13px] text-white/60 outline-none cursor-pointer">
-            {['All', 'Active', 'On Leave', 'Suspended'].map(s => <option key={s} value={s} className="bg-[#111318]">{s}</option>)}
-          </select>
+          <div className="flex gap-1.5">
+            {FILTERS.map(f => (
+              <button key={f} onClick={() => setStatusFilter(f)}
+                className="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all"
+                style={{
+                  background: statusFilter === f ? 'rgba(124,58,237,0.18)' : 'var(--surface)',
+                  color: statusFilter === f ? '#a78bfa' : 'var(--text-muted)',
+                  border: `1px solid ${statusFilter === f ? 'rgba(124,58,237,0.3)' : 'var(--border)'}`,
+                }}>{f}</button>
+            ))}
+          </div>
         </div>
-        <button onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 transition-colors text-white text-[13px] font-medium px-4 py-2 rounded-xl">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Add Student
-        </button>
+        {isAdmin && (
+          <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2 px-4 py-2 text-[13px]" style={{ borderRadius: 12 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Student
+          </button>
+        )}
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Total',     value: students.length,                                       color: 'text-white' },
-          { label: 'Active',    value: students.filter(s => s.status === 'Active').length,     color: 'text-emerald-400' },
-          { label: 'On Leave',  value: students.filter(s => s.status === 'On Leave').length,   color: 'text-amber-400' },
-          { label: 'Suspended', value: students.filter(s => s.status === 'Suspended').length,  color: 'text-red-400' },
-        ].map(item => (
-          <div key={item.label} className="bg-[#111318] border border-white/[0.06] rounded-2xl px-5 py-4 flex items-center justify-between">
-            <span className="text-[12px] text-white/40">{item.label}</span>
-            <span className={`text-[22px] font-bold ${item.color}`}>{item.value}</span>
+        {summaryStats.map(item => (
+          <div key={item.label} className="card px-5 py-4 flex items-center justify-between">
+            <span className="text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>{item.label}</span>
+            <span className="text-[22px] font-extrabold" style={{ color: item.color }}>{item.value}</span>
           </div>
         ))}
       </div>
 
       {/* Table */}
-      <div className="bg-[#111318] border border-white/[0.06] rounded-2xl overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-white/[0.06]">
-          <p className="text-[12px] text-white/35">{filtered.length} students found</p>
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid var(--border)' }}>
+          <p className="text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>
+            {filtered.length} student{filtered.length !== 1 ? 's' : ''} found
+          </p>
         </div>
         <table className="w-full">
           <thead>
-            <tr className="border-b border-white/[0.04]">
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
               {['Student', 'Course', 'Grade', 'Status', 'Joined', ''].map(h => (
-                <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold text-white/25 uppercase tracking-wider">{h}</th>
+                <th key={h} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((s, i) => (
-              <tr key={s.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${avatarColors[i % avatarColors.length]} flex items-center justify-center text-[10px] font-bold text-white shrink-0`}>
-                      {getInitials(s.name)}
+            {loading ? (
+              <SkeletonTable rows={6} cols={6} />
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={6}>
+                <EmptyState title="No students found" message="Try adjusting your search or filters."
+                  action={search || courseFilter !== 'All' || statusFilter !== 'All'
+                    ? { label: 'Clear filters', onClick: () => { setSearch(''); setCourseFilter('All'); setStatusFilter('All') } }
+                    : undefined} />
+              </td></tr>
+            ) : filtered.map((s, i) => {
+              const sc = STATUS_COLORS[s.status] ?? { dot: '#94a3b8', text: '#94a3b8' }
+              return (
+                <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background .15s' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <StudentAvatar name={s.name} index={i} />
+                      <span className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>{s.name}</span>
                     </div>
-                    <span className="text-[13px] text-white/85 font-medium">{s.name}</span>
-                  </div>
-                </td>
-                <td className="px-5 py-3.5 text-[13px] text-white/40">{s.course}</td>
-                <td className="px-5 py-3.5">
-                  {s.grade
-                    ? <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${gradeStyle[s.grade] || 'text-white/40 bg-white/[0.06]'}`}>{s.grade}</span>
-                    : <span className="text-[12px] text-white/20">—</span>}
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusStyle[s.status]?.dot || 'bg-white/30'}`} />
-                    <span className={`text-[12px] ${statusStyle[s.status]?.text || 'text-white/50'}`}>{s.status}</span>
-                  </div>
-                </td>
-                <td className="px-5 py-3.5 text-[12px] text-white/30">
-                  {new Date(s.joinedAt).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={() => handleAnalyze(s.id)}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-violet-400 hover:bg-violet-500/10 transition-colors"
-                      title="AI Analysis">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-                    </button>
-                    <button onClick={() => handleDelete(s.id)}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-10 text-center text-[13px] text-white/25">No students found</td></tr>
-            )}
+                  </td>
+                  <td className="px-5 py-3.5 text-[13px]" style={{ color: 'var(--text-muted)' }}>{s.course}</td>
+                  <td className="px-5 py-3.5">
+                    {s.grade
+                      ? <span className={`badge ${gradeStyle[s.grade] || 'badge-info'}`}>{s.grade}</span>
+                      : <span style={{ color: 'var(--text-faint)', fontSize: 13 }}>—</span>}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
+                      <span className="text-[12px] font-medium" style={{ color: sc.text }}>{s.status}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3.5 text-[12px]" style={{ color: 'var(--text-faint)' }}>
+                    {new Date(s.joinedAt).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={() => handleAnalyze(s.id)}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+                        style={{ color: 'var(--text-faint)' }} title="AI Analysis"
+                        onMouseEnter={e => { e.currentTarget.style.color = '#a78bfa'; e.currentTarget.style.background = 'rgba(124,58,237,0.12)' }}
+                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                      </button>
+                      {isAdmin && (
+                        <button onClick={() => { setDeleteId(s.id); setDeleteName(s.name) }}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+                          style={{ color: 'var(--text-faint)' }}
+                          onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(248,113,113,0.1)' }}
+                          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent' }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* Add Student Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-[#111318] border border-white/[0.08] rounded-2xl w-[400px] shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
-              <h2 className="text-[14px] font-semibold text-white">Add Student</h2>
-              <button onClick={() => setShowModal(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white/70 hover:bg-white/[0.06]">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            <div className="p-6 flex flex-col gap-4">
-              {[
-                { label: 'Full Name *', key: 'name',   placeholder: 'Student name' },
-                { label: 'Course *',    key: 'course', placeholder: 'e.g. Mathematics' },
-                { label: 'Grade',       key: 'grade',  placeholder: 'e.g. A, B+' },
-              ].map(f => (
-                <div key={f.key} className="flex flex-col gap-1.5">
-                  <label className="text-[11px] text-white/40 font-medium">{f.label}</label>
-                  <input value={(form as any)[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-                    placeholder={f.placeholder}
-                    className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-[13px] text-white/80 placeholder:text-white/20 outline-none focus:border-violet-500/50 transition-colors" />
-                </div>
-              ))}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] text-white/40 font-medium">Status</label>
-                <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
-                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50 transition-colors">
-                  {['Active', 'On Leave', 'Suspended'].map(s => <option key={s} value={s} className="bg-[#111318]">{s}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/[0.06]">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] text-white/50 border border-white/[0.08] rounded-xl">Cancel</button>
-              <button onClick={handleAdd} disabled={saving} className="px-4 py-2 text-[13px] font-medium bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white rounded-xl transition-colors">
-                {saving ? 'Adding...' : 'Add Student'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* AI Analysis Modal */}
-      {analysisModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-[#111318] border border-white/[0.08] rounded-2xl w-[580px] max-h-[80vh] shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-violet-500/15 flex items-center justify-center">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>
-                </div>
-                <h2 className="text-[14px] font-semibold text-white">
-                  {analysisData ? `تحليل أداء ${analysisData.student.name}` : 'جاري التحليل...'}
-                </h2>
-              </div>
-              <button onClick={() => setAnalysisModal(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white/70 hover:bg-white/[0.06]">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-
-            <div className="overflow-y-auto flex-1">
-              {analysisLoading ? (
-                <div className="flex flex-col items-center justify-center h-48 gap-3">
-                  <svg className="animate-spin text-violet-500" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                  </svg>
-                  <p className="text-[13px] text-white/40">يتم تحليل بيانات الطالب...</p>
-                </div>
-              ) : analysisData && (
-                <div className="p-6 space-y-5">
-                  {/* Stats */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-white/[0.03] rounded-xl px-4 py-3 text-center">
-                      <p className="text-[22px] font-bold text-emerald-400">{analysisData.stats.attendanceRate}%</p>
-                      <p className="text-[11px] text-white/35 mt-0.5">نسبة الحضور</p>
-                    </div>
-                    <div className="bg-white/[0.03] rounded-xl px-4 py-3 text-center">
-                      <p className="text-[22px] font-bold text-blue-400">{analysisData.stats.paidPayments}</p>
-                      <p className="text-[11px] text-white/35 mt-0.5">دفعات مسددة</p>
-                    </div>
-                    <div className="bg-white/[0.03] rounded-xl px-4 py-3 text-center">
-                      <p className="text-[22px] font-bold text-amber-400">{analysisData.stats.absentCount}</p>
-                      <p className="text-[11px] text-white/35 mt-0.5">أيام غياب</p>
-                    </div>
-                  </div>
-
-                  {/* Analysis Text */}
-                  <div className="bg-white/[0.02] border border-white/[0.05] rounded-xl p-4">
-                    <p className="text-[12px] text-white/40 mb-3 flex items-center gap-1.5">
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a10 10 0 1 0 10 10"/></svg>
-                      تحليل الذكاء الاصطناعي
-                    </p>
-                    <div className="text-[13px] text-white/70 leading-7 whitespace-pre-wrap text-right" dir="rtl">
-                      {analysisData.analysis}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="px-6 py-4 border-t border-white/[0.06]">
-              <button onClick={() => setAnalysisModal(false)} className="w-full px-4 py-2 text-[13px] text-white/50 border border-white/[0.08] rounded-xl hover:border-white/[0.15] transition-colors">
-                إغلاق
-              </button>
-            </div>
-          </div>
+      {error && (
+        <div className="flex items-center gap-2.5 rounded-xl px-4 py-3" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+          <p className="text-[13px]" style={{ color: '#f87171' }}>{error}</p>
+          <button onClick={fetchStudents} className="ml-auto text-[12px] underline" style={{ color: '#f87171' }}>Retry</button>
         </div>
       )}
     </div>

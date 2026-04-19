@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import api from '../api/api'
+import { useAuth } from '../context/AuthContext'
+import { toast } from '../components/ui/Toast'
 
 interface Student { id: number; name: string; course: string }
 interface AttendanceRecord { studentId: number; status: string }
-
 type Status = 'present' | 'absent' | 'late'
 
 const avatarColors = [
@@ -11,56 +12,53 @@ const avatarColors = [
   'from-emerald-500 to-teal-600',  'from-amber-400 to-orange-500',
   'from-pink-500 to-rose-600',
 ]
-
-const statusConfig: Record<Status, { label: string; active: string; dot: string; text: string }> = {
-  present: { label: 'Present', active: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20', dot: 'bg-emerald-400', text: 'text-emerald-400' },
-  absent:  { label: 'Absent',  active: 'bg-red-500/15 text-red-400 border border-red-500/20',             dot: 'bg-red-400',     text: 'text-red-400' },
-  late:    { label: 'Late',    active: 'bg-amber-500/15 text-amber-400 border border-amber-500/20',       dot: 'bg-amber-400',   text: 'text-amber-400' },
-}
-
 function getInitials(name: string) {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
+const statusConfig: Record<Status, { label: string; color: string; bg: string; border: string; dot: string }> = {
+  present: { label: 'Present', color: '#10b981', bg: 'rgba(16,185,129,0.12)',  border: 'rgba(16,185,129,0.25)',  dot: '#10b981' },
+  absent:  { label: 'Absent',  color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.25)', dot: '#f87171' },
+  late:    { label: 'Late',    color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.25)',  dot: '#fbbf24' },
+}
+
 export default function Attendance() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  const [students, setStudents] = useState<Student[]>([])
+
+  const [students,   setStudents]   = useState<Student[]>([])
   const [attendance, setAttendance] = useState<Record<number, Status>>({})
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState<number | null>(null)
+  const [loading,    setLoading]    = useState(true)
+  const [saving,     setSaving]     = useState<number | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
   async function fetchData() {
     try {
       setLoading(true)
-      const [studentsRes, attendanceRes] = await Promise.all([
-        api.get('/students'),
-        api.get('/attendance'),
-      ])
+      const [studentsRes, attendanceRes] = await Promise.all([api.get('/students'), api.get('/attendance')])
       const studentList: Student[] = studentsRes.data.students
       setStudents(studentList)
-
       const records: AttendanceRecord[] = attendanceRes.data.records
       const map: Record<number, Status> = {}
       studentList.forEach(s => { map[s.id] = 'present' })
       records.forEach(r => { map[r.studentId] = r.status as Status })
       setAttendance(map)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   async function handleMark(studentId: number, status: Status) {
-    setAttendance(prev => ({ ...prev, [studentId]: status }))
+    if (!isAdmin) return
+    const prev = attendance[studentId] || 'present'
+    setAttendance(p => ({ ...p, [studentId]: status }))
     setSaving(studentId)
     try {
       await api.post('/attendance', { studentId, status })
     } catch {
-      alert('Failed to save attendance')
-    } finally {
-      setSaving(null)
-    }
+      setAttendance(p => ({ ...p, [studentId]: prev }))
+      toast.error('Failed to save attendance')
+    } finally { setSaving(null) }
   }
 
   const counts = {
@@ -70,116 +68,150 @@ export default function Attendance() {
   }
   const rate = students.length ? Math.round((counts.present / students.length) * 100) : 0
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <svg className="animate-spin text-violet-500" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-      </svg>
-    </div>
-  )
+  const summaryStats = [
+    { label: 'Rate',    value: `${rate}%`,      color: rate >= 90 ? '#10b981' : '#fbbf24' },
+    { label: 'Present', value: counts.present,  color: '#10b981' },
+    { label: 'Absent',  value: counts.absent,   color: '#f87171' },
+    { label: 'Late',    value: counts.late,      color: '#fbbf24' },
+  ]
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 animate-fade-in">
       {/* Date bar */}
-      <div className="bg-[#111318] border border-white/[0.06] rounded-2xl px-5 py-3.5 flex items-center justify-between">
+      <div className="card px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(124,58,237,0.12)', color: '#a78bfa' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/>
+            </svg>
           </div>
           <div>
-            <p className="text-[13px] font-medium text-white/80">Today's Attendance</p>
-            <p className="text-[11px] text-white/35 mt-0.5">{today}</p>
+            <p className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>Today's Attendance</p>
+            <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{today}</p>
           </div>
         </div>
+        {!isAdmin && (
+          <span className="text-[11px] px-3 py-1 rounded-full" style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
+            View only
+          </span>
+        )}
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Attendance Rate', value: `${rate}%`, color: rate >= 90 ? 'text-emerald-400' : 'text-amber-400' },
-          { label: 'Present', value: counts.present, color: 'text-emerald-400' },
-          { label: 'Absent',  value: counts.absent,  color: 'text-red-400' },
-          { label: 'Late',    value: counts.late,    color: 'text-amber-400' },
-        ].map(item => (
-          <div key={item.label} className="bg-[#111318] border border-white/[0.06] rounded-2xl px-5 py-4 flex items-center justify-between">
-            <span className="text-[12px] text-white/40">{item.label}</span>
-            <span className={`text-[22px] font-bold ${item.color}`}>{item.value}</span>
+      <div className="grid grid-cols-4 gap-3 stagger">
+        {summaryStats.map(item => (
+          <div key={item.label} className="card px-5 py-4 flex items-center justify-between animate-slide-up">
+            <span className="text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>{item.label}</span>
+            <span className="text-[22px] font-extrabold" style={{ color: item.color }}>{item.value}</span>
           </div>
         ))}
       </div>
 
-      {/* Progress */}
-      <div className="bg-[#111318] border border-white/[0.06] rounded-2xl px-5 py-4">
-        <div className="flex items-center justify-between mb-2.5">
-          <span className="text-[12px] text-white/40">Attendance breakdown</span>
-          <span className="text-[12px] text-white/60 font-medium">{students.length} students total</span>
+      {/* Progress bar */}
+      <div className="card px-5 py-4 animate-slide-up">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>Attendance breakdown</span>
+          <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{students.length} students total</span>
         </div>
-        <div className="flex h-2 rounded-full overflow-hidden gap-0.5">
-          <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${students.length ? (counts.present / students.length) * 100 : 0}%` }} />
-          <div className="bg-amber-500 transition-all duration-500"  style={{ width: `${students.length ? (counts.late    / students.length) * 100 : 0}%` }} />
-          <div className="bg-red-500 transition-all duration-500"    style={{ width: `${students.length ? (counts.absent  / students.length) * 100 : 0}%` }} />
+        <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
+          <div className="rounded-full transition-all duration-700" style={{ width: `${students.length ? (counts.present / students.length) * 100 : 0}%`, background: '#10b981' }} />
+          <div className="rounded-full transition-all duration-700" style={{ width: `${students.length ? (counts.late    / students.length) * 100 : 0}%`, background: '#fbbf24' }} />
+          <div className="rounded-full transition-all duration-700" style={{ width: `${students.length ? (counts.absent  / students.length) * 100 : 0}%`, background: '#f87171' }} />
         </div>
         <div className="flex items-center gap-4 mt-2.5">
-          {[{ label: 'Present', color: 'bg-emerald-500' }, { label: 'Late', color: 'bg-amber-500' }, { label: 'Absent', color: 'bg-red-500' }].map(l => (
+          {[
+            { label: 'Present', color: '#10b981' },
+            { label: 'Late',    color: '#fbbf24' },
+            { label: 'Absent',  color: '#f87171' },
+          ].map(l => (
             <div key={l.label} className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${l.color}`} />
-              <span className="text-[11px] text-white/35">{l.label}</span>
+              <span className="w-2 h-2 rounded-full" style={{ background: l.color }} />
+              <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>{l.label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-[#111318] border border-white/[0.06] rounded-2xl overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-white/[0.06]">
-          <p className="text-[13px] font-medium text-white/60">Student List</p>
+      {/* Student Table */}
+      <div className="card overflow-hidden animate-slide-up">
+        <div className="px-5 py-3.5" style={{ borderBottom: '1px solid var(--border)' }}>
+          <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>Student List</p>
         </div>
         <table className="w-full">
           <thead>
-            <tr className="border-b border-white/[0.04]">
-              {['Student', 'Course', 'Status', 'Action'].map(h => (
-                <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold text-white/25 uppercase tracking-wider">{h}</th>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              {['Student', 'Course', 'Status', isAdmin ? 'Mark Attendance' : ''].filter(Boolean).map(h => (
+                <th key={h} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {students.map((s, i) => {
-              const current = attendance[s.id] || 'present'
-              return (
-                <tr key={s.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${avatarColors[i % avatarColors.length]} flex items-center justify-center text-[10px] font-bold text-white shrink-0`}>
-                        {getInitials(s.name)}
-                      </div>
-                      <span className="text-[13px] text-white/85 font-medium">{s.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-[13px] text-white/40">{s.course}</td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-1.5">
-                      {saving === s.id
-                        ? <svg className="animate-spin text-white/30" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                        : <span className={`w-1.5 h-1.5 rounded-full ${statusConfig[current].dot}`} />
-                      }
-                      <span className={`text-[12px] ${statusConfig[current].text}`}>{statusConfig[current].label}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex gap-2">
-                      {(['present', 'absent', 'late'] as Status[]).map(st => (
-                        <button key={st} onClick={() => handleMark(s.id, st)}
-                          className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
-                            current === st ? statusConfig[st].active : 'text-white/25 hover:text-white/60 border border-white/[0.06] hover:border-white/[0.1]'
-                          }`}>
-                          {statusConfig[st].label}
-                        </button>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
+            {loading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    {[140, 90, 80, 200].map((w, j) => (
+                      <td key={j} className="px-5 py-4">
+                        <div className="skeleton" style={{ width: w, height: 14 }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : students.map((s, i) => {
+                  const current = attendance[s.id] || 'present'
+                  const sc = statusConfig[current]
+                  return (
+                    <tr key={s.id} className="transition-colors" style={{ borderBottom: '1px solid var(--border)' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${avatarColors[i % avatarColors.length]} flex items-center justify-center text-[11px] font-bold text-white shrink-0`}>
+                            {getInitials(s.name)}
+                          </div>
+                          <span className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>{s.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-[13px]" style={{ color: 'var(--text-muted)' }}>{s.course}</td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-1.5">
+                          {saving === s.id
+                            ? <div className="w-3 h-3 border border-white/30 border-t-transparent rounded-full animate-spin" />
+                            : <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
+                          }
+                          <span className="text-[12px] font-semibold" style={{ color: sc.color }}>{sc.label}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex gap-2">
+                          {(['present', 'absent', 'late'] as Status[]).map(st => {
+                            const c = statusConfig[st]
+                            const isSelected = current === st
+                            return (
+                              <button key={st} onClick={() => handleMark(s.id, st)}
+                                disabled={!isAdmin || saving === s.id}
+                                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
+                                style={{
+                                  background: isSelected ? c.bg : 'transparent',
+                                  color:      isSelected ? c.color : 'var(--text-faint)',
+                                  border:     `1px solid ${isSelected ? c.border : 'var(--border)'}`,
+                                  cursor:     !isAdmin ? 'not-allowed' : 'pointer',
+                                  opacity:    !isAdmin ? 0.6 : 1,
+                                }}
+                                onMouseEnter={e => { if (isAdmin && !isSelected) { e.currentTarget.style.background = c.bg; e.currentTarget.style.color = c.color; e.currentTarget.style.borderColor = c.border } }}
+                                onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.borderColor = 'var(--border)' } }}
+                              >
+                                {c.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+            }
           </tbody>
         </table>
       </div>

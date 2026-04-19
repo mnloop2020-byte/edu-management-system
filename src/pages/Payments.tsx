@@ -1,566 +1,468 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import api from '../api/api'
 import { useAuth } from '../context/AuthContext'
+import { toast } from '../components/ui/Toast'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { Modal } from '../components/ui/Modal'
+import { SkeletonTable } from '../components/ui/Skeleton'
+import { EmptyState } from '../components/ui/EmptyState'
 
 interface Payment {
-  id: number
-  totalAmount: number
-  paidAmount: number
-  remaining: number
-  percentage: number
-  dueDate: string | null
-  date: string
+  id: number; totalAmount: number; paidAmount: number; remaining: number
+  percentage: number; dueDate: string | null; date: string
   status: 'paid' | 'pending' | 'overdue' | 'partial'
   student: { id: number; name: string; course: string }
 }
+interface Student { id: number; name: string; course: string }
+interface Summary { annualFee: number; total: number; paid: number; remaining: number; fullPaid: number; partial: number; pending: number; overdue: number }
+interface Transaction { id: number; amount: number; note: string | null; date: string }
 
-interface Student {
-  id: number
-  name: string
-  course: string
+const avatarColors = ['from-violet-500 to-indigo-600','from-blue-500 to-cyan-600','from-emerald-500 to-teal-600','from-amber-400 to-orange-500','from-pink-500 to-rose-600']
+function getInitials(name: string) { return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() }
+
+const STATUS = {
+  paid:    { dot: '#10b981', text: '#10b981', badge: 'badge-success', label: 'Paid'    },
+  partial: { dot: '#60a5fa', text: '#60a5fa', badge: 'badge-info',    label: 'Partial' },
+  pending: { dot: '#fbbf24', text: '#fbbf24', badge: 'badge-warning', label: 'Pending' },
+  overdue: { dot: '#f87171', text: '#f87171', badge: 'badge-error',   label: 'Overdue' },
 }
-
-interface Summary {
-  annualFee: number
-  total: number
-  paid: number
-  remaining: number
-  fullPaid: number
-  partial: number
-  pending: number
-  overdue: number
-}
-
-interface Transaction {
-  id: number
-  amount: number
-  note: string | null
-  date: string
-}
-
-const avatarColors = [
-  'from-violet-500 to-indigo-600', 'from-blue-500 to-cyan-600',
-  'from-emerald-500 to-teal-600', 'from-amber-400 to-orange-500',
-  'from-pink-500 to-rose-600',
-]
-
-function getInitials(name: string) {
-  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-}
-
-function statusBadge(status: string) {
-  switch (status) {
-    case 'paid':    return { dot: 'bg-emerald-400', text: 'text-emerald-400', label: 'Paid' }
-    case 'partial': return { dot: 'bg-blue-400',    text: 'text-blue-400',    label: 'Partial' }
-    case 'pending': return { dot: 'bg-amber-400',   text: 'text-amber-400',   label: 'Pending' }
-    case 'overdue': return { dot: 'bg-red-400',     text: 'text-red-400',     label: 'Overdue' }
-    default:        return { dot: 'bg-white/30',    text: 'text-white/50',    label: status }
-  }
-}
+const FILTERS = ['all','paid','partial','pending','overdue'] as const
 
 export default function Payments() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
 
-  const [payments, setPayments] = useState<Payment[]>([])
-  const [summary, setSummary] = useState<Summary>({ annualFee: 0, total: 0, paid: 0, remaining: 0, fullPaid: 0, partial: 0, pending: 0, overdue: 0 })
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'all' | 'paid' | 'partial' | 'pending' | 'overdue'>('all')
+  const [payments,    setPayments]    = useState<Payment[]>([])
+  const [summary,     setSummary]     = useState<Summary>({ annualFee:0,total:0,paid:0,remaining:0,fullPaid:0,partial:0,pending:0,overdue:0 })
+  const [loading,     setLoading]     = useState(true)
+  const [error,       setError]       = useState('')
+  const [filter,      setFilter]      = useState<typeof FILTERS[number]>('all')
 
-  const [showModal, setShowModal] = useState(false)
-  const [students, setStudents] = useState<Student[]>([])
-  const [form, setForm] = useState({ studentId: '', paidAmount: '', dueDate: '', payDate: '' })
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState('')
+  const [showModal,   setShowModal]   = useState(false)
+  const [students,    setStudents]    = useState<Student[]>([])
+  const [form,        setForm]        = useState({ studentId:'', paidAmount:'', dueDate:'', payDate:'' })
+  const [saving,      setSaving]      = useState(false)
+  const [formError,   setFormError]   = useState('')
 
-  const [partialModal, setPartialModal] = useState(false)
-  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
-  const [partialAmount, setPartialAmount] = useState('')
-  const [partialDate, setPartialDate] = useState('')
-  const [partialSaving, setPartialSaving] = useState(false)
+  const [partialModal, setPartialModal]  = useState(false)
+  const [selPayment,   setSelPayment]    = useState<Payment | null>(null)
+  const [partialAmt,   setPartialAmt]    = useState('')
+  const [partialDate,  setPartialDate]   = useState('')
+  const [partialSaving,setPartialSaving] = useState(false)
 
-  const [txModal, setTxModal] = useState(false)
-  const [txPayment, setTxPayment] = useState<Payment | null>(null)
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [txLoading, setTxLoading] = useState(false)
+  const [txModal,     setTxModal]     = useState(false)
+  const [txPayment,   setTxPayment]   = useState<Payment | null>(null)
+  const [transactions,setTransactions]= useState<Transaction[]>([])
+  const [txLoading,   setTxLoading]   = useState(false)
 
-  const [editFee, setEditFee] = useState(false)
-  const [newFee, setNewFee] = useState('')
-  const [feeSaving, setFeeSaving] = useState(false)
+  const [editFee,     setEditFee]     = useState(false)
+  const [newFee,      setNewFee]      = useState('')
+  const [feeSaving,   setFeeSaving]   = useState(false)
+
+  const [deleteId,    setDeleteId]    = useState<number | null>(null)
+  const [delLoading,  setDelLoading]  = useState(false)
 
   useEffect(() => { fetchData() }, [])
 
   async function fetchData() {
     try {
-      setLoading(true)
-      const [paymentsRes, summaryRes] = await Promise.all([
-        api.get('/payments'),
-        api.get('/payments/summary'),
-      ])
+      setLoading(true); setError('')
+      const [paymentsRes, summaryRes] = await Promise.all([api.get('/payments'), api.get('/payments/summary')])
       setPayments(paymentsRes.data.payments)
       setSummary(summaryRes.data.summary)
-    } finally {
-      setLoading(false)
-    }
+    } catch { setError('Failed to load payment data. Please refresh.') }
+    finally    { setLoading(false) }
   }
 
-  async function openTransactions(p: Payment) {
-    setTxPayment(p)
-    setTxModal(true)
-    setTxLoading(true)
+  async function openTransactions(payment: Payment) {
+    setTxPayment(payment); setTxModal(true); setTxLoading(true)
     try {
-      const res = await api.get(`/payments/${p.id}/transactions`)
+      const res = await api.get(`/payments/${payment.id}/transactions`)
       setTransactions(res.data.transactions)
-    } catch {
-      setTransactions([])
-    } finally {
-      setTxLoading(false)
-    }
+    } catch { setTransactions([]) }
+    finally   { setTxLoading(false) }
   }
 
-  async function handleDelete(id: number) {
-    if (!confirm('هل أنت متأكد من حذف هذا السجل؟')) return
+  async function handleDelete() {
+    if (!deleteId) return
+    setDelLoading(true)
     try {
-      await api.delete(`/payments/${id}`)
-      fetchData()
-    } catch {
-      alert('فشل في الحذف')
-    }
+      await api.delete(`/payments/${deleteId}`)
+      await fetchData()
+      toast.success('Payment record deleted.')
+    } catch { toast.error('Failed to delete payment.') }
+    finally   { setDelLoading(false); setDeleteId(null) }
   }
 
   async function openModal() {
-    setForm({ studentId: '', paidAmount: '', dueDate: '', payDate: '' })
-    setFormError('')
-    setShowModal(true)
+    if (!isAdmin) return
+    setForm({ studentId:'', paidAmount:'', dueDate:'', payDate:'' }); setFormError(''); setShowModal(true)
     if (students.length === 0) {
-      const res = await api.get('/students')
-      setStudents(res.data.students)
+      try { const res = await api.get('/students'); setStudents(res.data.students) }
+      catch { setFormError('Unable to load students.') }
     }
   }
 
   async function handleAddPayment() {
-    if (!form.studentId || !form.paidAmount) {
-      setFormError('يرجى تحديد الطالب والمبلغ المدفوع')
-      return
-    }
+    if (!isAdmin || !form.studentId || !form.paidAmount) { setFormError('Please choose a student and enter the paid amount.'); return }
     setSaving(true)
     try {
-      await api.post('/payments', {
-        studentId: Number(form.studentId),
-        paidAmount: Number(form.paidAmount),
-        dueDate: form.dueDate || null,
-        payDate: form.payDate || null,
-      })
-      setShowModal(false)
-      fetchData()
-    } catch {
-      setFormError('حدث خطأ، حاول مجدداً')
-    } finally {
-      setSaving(false)
-    }
+      await api.post('/payments', { studentId: Number(form.studentId), paidAmount: Number(form.paidAmount), dueDate: form.dueDate || null, payDate: form.payDate || null })
+      setShowModal(false); await fetchData(); toast.success('Payment added!')
+    } catch { setFormError('Unable to save.') }
+    finally   { setSaving(false) }
   }
 
   async function handlePartialPay() {
-    if (!partialAmount || !selectedPayment) return
+    if (!isAdmin || !partialAmt || !selPayment) return
     setPartialSaving(true)
     try {
-      await api.patch(`/payments/${selectedPayment.id}/pay`, {
-        amount: Number(partialAmount),
-        date: partialDate || null,
-      })
-      setPartialModal(false)
-      setPartialAmount('')
-      setPartialDate('')
-      fetchData()
-    } catch {
-      alert('فشل في إضافة الدفع')
-    } finally {
-      setPartialSaving(false)
-    }
+      await api.patch(`/payments/${selPayment.id}/pay`, { amount: Number(partialAmt), date: partialDate || null })
+      setPartialModal(false); setPartialAmt(''); setPartialDate(''); await fetchData(); toast.success('Payment recorded!')
+    } catch { toast.error('Failed to record payment.') }
+    finally   { setPartialSaving(false) }
   }
 
   async function handleUpdateFee() {
-    if (!newFee) return
+    if (!isAdmin || !newFee) return
     setFeeSaving(true)
     try {
       await api.post('/settings', { key: 'annual_fee', value: newFee })
-      setEditFee(false)
-      fetchData()
-    } catch {
-      alert('فشل في تحديث الرسوم')
-    } finally {
-      setFeeSaving(false)
-    }
+      setEditFee(false); await fetchData(); toast.success('Annual fee updated!')
+    } catch { toast.error('Failed to update fee.') }
+    finally   { setFeeSaving(false) }
   }
 
   const filtered = filter === 'all' ? payments : payments.filter(p => p.status === filter)
   const collectionRate = summary.total ? Math.round((summary.paid / summary.total) * 100) : 0
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <svg className="animate-spin text-violet-500" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-      </svg>
-    </div>
-  )
+  const statCards = [
+    { label: 'Total Fees',  value: `${summary.total.toLocaleString()} SAR`,    color: 'var(--text)' },
+    { label: 'Collected',   value: `${summary.paid.toLocaleString()} SAR`,     color: '#10b981', sub: `${collectionRate}% rate` },
+    { label: 'Remaining',   value: `${summary.remaining.toLocaleString()} SAR`,color: '#f87171' },
+    { label: 'Partial',     value: `${summary.partial} students`,              color: '#60a5fa' },
+  ]
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 animate-fade-in">
+      <ConfirmDialog
+        open={deleteId !== null}
+        title="Delete Payment"
+        message="Are you sure you want to delete this payment record?"
+        confirmLabel={delLoading ? 'Deleting...' : 'Delete'}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteId(null)}
+      />
 
-      {/* Annual Fee Banner */}
-      <div className="bg-[#111318] border border-white/[0.06] rounded-2xl px-5 py-4 flex items-center justify-between">
+      {/* Transactions Modal */}
+      <Modal
+        open={txModal && !!txPayment}
+        onClose={() => setTxModal(false)}
+        title={txPayment?.student.name ?? 'Transactions'}
+        subtitle={txPayment?.student.course}
+        maxWidth={480}
+        footer={<button onClick={() => setTxModal(false)} className="w-full py-2.5 text-[13px] btn-ghost rounded-xl">Close</button>}
+      >
+        {txPayment && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              {[ { label:'Total', value:txPayment.totalAmount.toLocaleString(), color:'var(--text)' },
+                 { label:'Paid',  value:txPayment.paidAmount.toLocaleString(),  color:'#10b981' },
+                 { label:'Left',  value:txPayment.remaining.toLocaleString(),   color: txPayment.remaining > 0 ? '#f87171' : '#10b981' },
+              ].map(s => (
+                <div key={s.label} className="rounded-xl px-3 py-3 text-center" style={{ background:'rgba(255,255,255,0.04)', border:'1px solid var(--border)' }}>
+                  <p className="text-[11px] mb-1" style={{ color:'var(--text-muted)' }}>{s.label}</p>
+                  <p className="text-[16px] font-bold" style={{ color: s.color }}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] font-bold" style={{ color:'var(--text-muted)' }}>Payment History</p>
+            {txLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : transactions.length === 0 ? (
+              <EmptyState title="No transactions" message="No payments recorded yet." />
+            ) : (
+              <div className="space-y-2">
+                {transactions.map((tx, i) => (
+                  <div key={tx.id} className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background:'rgba(255,255,255,0.04)', border:'1px solid var(--border)' }}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ background:'rgba(16,185,129,0.15)', color:'#10b981' }}>{i+1}</div>
+                      <div>
+                        <p className="text-[13px] font-bold" style={{ color:'#10b981' }}>+{tx.amount.toLocaleString()} SAR</p>
+                        {tx.note && <p className="text-[11px]" style={{ color:'var(--text-muted)' }}>{tx.note}</p>}
+                      </div>
+                    </div>
+                    <p className="text-[11px]" style={{ color:'var(--text-faint)' }}>
+                      {new Date(tx.date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Add Payment Modal */}
+      <Modal
+        open={showModal && isAdmin}
+        onClose={() => setShowModal(false)}
+        title="Add New Payment"
+        icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>}
+        footer={
+          <div className="flex gap-2.5">
+            <button onClick={() => setShowModal(false)} className="flex-1 py-2.5 text-[13px] btn-ghost rounded-xl">Cancel</button>
+            <button onClick={handleAddPayment} disabled={saving} className="flex-1 py-2.5 text-[13px] btn-primary rounded-xl">{saving ? 'Saving...' : 'Add'}</button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          {formError && (
+            <div className="rounded-xl px-4 py-2.5" style={{ background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.2)' }}>
+              <p className="text-[12px]" style={{ color:'#f87171' }}>{formError}</p>
+            </div>
+          )}
+          <div className="rounded-xl px-4 py-3" style={{ background:'rgba(124,58,237,0.08)', border:'1px solid rgba(124,58,237,0.15)' }}>
+            <p className="text-[12px]" style={{ color:'#a78bfa' }}>Annual fee: <strong>{summary.annualFee.toLocaleString()} SAR</strong></p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12px] font-semibold" style={{ color:'var(--text-muted)' }}>Student</label>
+            <select value={form.studentId} onChange={e => setForm({ ...form, studentId: e.target.value })} className="input">
+              <option value="" disabled>Choose a student...</option>
+              {students.map(s => <option key={s.id} value={s.id}>{s.name} — {s.course}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12px] font-semibold" style={{ color:'var(--text-muted)' }}>Paid Amount (SAR)</label>
+            <input type="number" value={form.paidAmount} onChange={e => setForm({ ...form, paidAmount: e.target.value })} placeholder="0" className="input" />
+            {form.paidAmount && <p className="text-[11px]" style={{ color:'var(--text-muted)' }}>Remaining: {(summary.annualFee - Number(form.paidAmount)).toLocaleString()} SAR</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold" style={{ color:'var(--text-muted)' }}>Payment Date</label>
+              <input type="date" value={form.payDate} onChange={e => setForm({ ...form, payDate: e.target.value })} className="input" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold" style={{ color:'var(--text-muted)' }}>Due Date</label>
+              <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className="input" />
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Partial Payment Modal */}
+      <Modal
+        open={partialModal && !!selPayment && isAdmin}
+        onClose={() => setPartialModal(false)}
+        title="Record Payment"
+        maxWidth={400}
+        footer={
+          <div className="flex gap-2.5">
+            <button onClick={() => setPartialModal(false)} className="flex-1 py-2.5 text-[13px] btn-ghost rounded-xl">Cancel</button>
+            <button onClick={handlePartialPay} disabled={partialSaving || !partialAmt} className="flex-1 py-2.5 text-[13px] btn-primary rounded-xl">{partialSaving ? 'Saving...' : 'Confirm'}</button>
+          </div>
+        }
+      >
+        {selPayment && (
+          <div className="flex flex-col gap-4">
+            <div className="rounded-xl p-4" style={{ background:'rgba(255,255,255,0.04)', border:'1px solid var(--border)' }}>
+              <p className="text-[13px] font-bold" style={{ color:'var(--text)' }}>{selPayment.student.name}</p>
+              <p className="text-[12px] mt-1" style={{ color:'var(--text-muted)' }}>
+                Remaining: <span style={{ color:'#f87171', fontWeight:700 }}>{selPayment.remaining.toLocaleString()} SAR</span>
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold" style={{ color:'var(--text-muted)' }}>Amount (SAR)</label>
+              <input type="number" value={partialAmt} onChange={e => setPartialAmt(e.target.value)} placeholder="0" max={selPayment.remaining} className="input" />
+              {partialAmt && Number(partialAmt) >= selPayment.remaining && (
+                <p className="text-[11px] font-semibold" style={{ color:'#10b981' }}>This will complete the payment ✓</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-semibold" style={{ color:'var(--text-muted)' }}>Date (Optional)</label>
+              <input type="date" value={partialDate} onChange={e => setPartialDate(e.target.value)} className="input" />
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Error */}
+      {error && (
+        <div className="card px-5 py-4">
+          <EmptyState title="Failed to load" message={error} action={{ label:'Retry', onClick: fetchData }} />
+        </div>
+      )}
+
+      {/* Annual fee card */}
+      <div className="card px-5 py-4 flex items-center justify-between">
         <div>
-          <p className="text-[11px] text-white/35 mb-1">الرسوم السنوية</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider mb-1" style={{ color:'var(--text-faint)' }}>Annual Fee</p>
           {editFee ? (
             <div className="flex items-center gap-2">
-              <input type="number" value={newFee} onChange={e => setNewFee(e.target.value)}
-                placeholder={String(summary.annualFee)}
-                className="bg-white/[0.06] border border-white/[0.1] rounded-lg px-3 py-1.5 text-[14px] text-white/80 outline-none focus:border-violet-500/50 w-36" />
-              <span className="text-[13px] text-white/40">ريال</span>
-              <button onClick={handleUpdateFee} disabled={feeSaving}
-                className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-[12px] rounded-lg disabled:opacity-50 transition-colors">
-                {feeSaving ? '...' : 'حفظ'}
-              </button>
-              <button onClick={() => setEditFee(false)} className="px-3 py-1.5 border border-white/[0.08] text-white/40 text-[12px] rounded-lg">
-                إلغاء
-              </button>
+              <input type="number" value={newFee} onChange={e => setNewFee(e.target.value)} placeholder={String(summary.annualFee)}
+                className="input" style={{ width:150 }} />
+              <span className="text-[13px]" style={{ color:'var(--text-muted)' }}>SAR</span>
+              <button onClick={handleUpdateFee} disabled={feeSaving} className="btn-primary px-3 py-1.5 text-[12px]" style={{ borderRadius:8 }}>{feeSaving ? '...' : 'Save'}</button>
+              <button onClick={() => setEditFee(false)} className="btn-ghost px-3 py-1.5 text-[12px]" style={{ borderRadius:8 }}>Cancel</button>
             </div>
           ) : (
-            <p className="text-[22px] font-bold text-white">
-              {summary.annualFee.toLocaleString()} <span className="text-[14px] font-normal text-white/40">ريال</span>
+            <p className="text-[24px] font-extrabold" style={{ color:'var(--text)' }}>
+              {summary.annualFee.toLocaleString()} <span className="text-[14px] font-normal" style={{ color:'var(--text-muted)' }}>SAR</span>
             </p>
           )}
         </div>
         {isAdmin && !editFee && (
           <button onClick={() => { setEditFee(true); setNewFee(String(summary.annualFee)) }}
-            className="flex items-center gap-1.5 text-[12px] text-violet-400 hover:text-violet-300 border border-violet-500/20 hover:border-violet-500/40 px-3 py-1.5 rounded-lg transition-colors">
+            className="flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg transition-colors"
+            style={{ color:'#a78bfa', background:'rgba(124,58,237,0.1)', border:'1px solid rgba(124,58,237,0.2)' }}
+            onMouseEnter={e => (e.currentTarget.style.background='rgba(124,58,237,0.18)')}
+            onMouseLeave={e => (e.currentTarget.style.background='rgba(124,58,237,0.1)')}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
-            تعديل
+            Edit
           </button>
         )}
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'إجمالي الرسوم', value: `${summary.total.toLocaleString()}`,     sub: 'ريال',   color: 'text-white' },
-          { label: 'المحصّل',        value: `${summary.paid.toLocaleString()}`,      sub: `${collectionRate}%`, color: 'text-emerald-400' },
-          { label: 'المتبقي',        value: `${summary.remaining.toLocaleString()}`, sub: 'ريال',   color: 'text-red-400' },
-          { label: 'دفع جزئي',      value: summary.partial,                         sub: 'طلاب',   color: 'text-blue-400' },
-        ].map(item => (
-          <div key={item.label} className="bg-[#111318] border border-white/[0.06] rounded-2xl px-5 py-4">
-            <p className="text-[11px] text-white/35 mb-1">{item.label}</p>
-            <p className={`text-[22px] font-bold ${item.color}`}>{item.value}</p>
-            <p className="text-[11px] text-white/30 mt-0.5">{item.sub}</p>
+      <div className="grid grid-cols-4 gap-3 stagger">
+        {statCards.map(item => (
+          <div key={item.label} className="card px-5 py-4 animate-slide-up">
+            <p className="text-[11px] font-semibold mb-1" style={{ color:'var(--text-faint)' }}>{item.label}</p>
+            <p className="text-[20px] font-extrabold leading-none" style={{ color: item.color }}>{item.value}</p>
+            {item.sub && <p className="text-[11px] mt-1" style={{ color:'#10b981' }}>{item.sub}</p>}
           </div>
         ))}
       </div>
 
       {/* Progress */}
-      <div className="bg-[#111318] border border-white/[0.06] rounded-2xl px-5 py-4">
+      <div className="card px-5 py-4">
         <div className="flex items-center justify-between mb-2.5">
-          <span className="text-[12px] text-white/40">نسبة التحصيل</span>
-          <span className="text-[12px] font-semibold text-white/60">{collectionRate}%</span>
+          <span className="text-[13px] font-semibold" style={{ color:'var(--text)' }}>Collection Rate</span>
+          <span className="text-[13px] font-bold" style={{ color: collectionRate >= 70 ? '#10b981' : '#fbbf24' }}>{collectionRate}%</span>
         </div>
-        <div className="h-2 bg-white/[0.04] rounded-full overflow-hidden">
-          <div className="h-full bg-emerald-500 rounded-full transition-all duration-700" style={{ width: `${collectionRate}%` }} />
+        <div className="h-2.5 rounded-full overflow-hidden" style={{ background:'rgba(255,255,255,0.05)' }}>
+          <div className="h-full rounded-full transition-all duration-700" style={{ width:`${collectionRate}%`, background:'linear-gradient(90deg,#7c3aed,#10b981)' }} />
         </div>
       </div>
 
-      {/* Filter + Add */}
+      {/* Filters + Add */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          {(['all', 'paid', 'partial', 'pending', 'overdue'] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all capitalize ${
-                filter === f
-                  ? 'bg-violet-600/20 text-violet-300 border border-violet-500/20'
-                  : 'text-white/35 hover:text-white/65 border border-white/[0.06]'
-              }`}>
-              {f === 'all' ? `الكل (${payments.length})` : `${statusBadge(f).label} (${payments.filter(p => p.status === f).length})`}
-            </button>
-          ))}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {FILTERS.map(f => {
+            const count = f === 'all' ? payments.length : payments.filter(p => p.status === f).length
+            return (
+              <button key={f} onClick={() => setFilter(f)}
+                className="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all capitalize"
+                style={{
+                  background: filter === f ? 'rgba(124,58,237,0.15)' : 'var(--surface)',
+                  color:      filter === f ? '#a78bfa'               : 'var(--text-muted)',
+                  border:     `1px solid ${filter === f ? 'rgba(124,58,237,0.3)' : 'var(--border)'}`,
+                }}>
+                {f === 'all' ? `All (${count})` : `${STATUS[f].label} (${count})`}
+              </button>
+            )
+          })}
         </div>
-        <button onClick={openModal}
-          className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-[13px] font-medium rounded-xl transition-colors">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          إضافة دفعة
-        </button>
+        {isAdmin && (
+          <button onClick={openModal} className="btn-primary flex items-center gap-2 px-4 py-2 text-[13px]" style={{ borderRadius:12 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Payment
+          </button>
+        )}
       </div>
 
       {/* Table */}
-      <div className="bg-[#111318] border border-white/[0.06] rounded-2xl overflow-hidden">
+      <div className="card overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-white/[0.04]">
-              {['الطالب', 'الرسوم الكاملة', 'المدفوع', 'المتبقي', 'الحالة', ''].map((h, i) => (
-                <th key={i} className="px-5 py-3 text-right text-[10px] font-semibold text-white/25 uppercase tracking-wider">{h}</th>
+            <tr style={{ borderBottom:'1px solid var(--border)' }}>
+              {['Student','Total','Paid','Remaining','Status',''].map((h,i) => (
+                <th key={i} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider" style={{ color:'var(--text-faint)' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((p, i) => {
-              const badge = statusBadge(p.status)
-              return (
-                <tr key={p.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                  {/* ✅ الضغط على الطالب يفتح سجل الدفعات */}
-                  <td className="px-5 py-3.5 cursor-pointer" onClick={() => openTransactions(p)}>
-                    <div className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                      <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${avatarColors[i % avatarColors.length]} flex items-center justify-center text-[10px] font-bold text-white shrink-0`}>
-                        {getInitials(p.student.name)}
+            {loading ? (
+              <SkeletonTable rows={5} cols={6} />
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={6}><EmptyState title="No payments found" message="Try a different filter." /></td></tr>
+            ) : (
+              filtered.map((p, i) => {
+                const s = STATUS[p.status]
+                return (
+                  <tr key={p.id} className="transition-colors cursor-pointer" style={{ borderBottom:'1px solid var(--border)' }}
+                    onClick={() => openTransactions(p)}
+                    onMouseEnter={e => (e.currentTarget.style.background='rgba(255,255,255,0.025)')}
+                    onMouseLeave={e => (e.currentTarget.style.background='transparent')}>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${avatarColors[i % avatarColors.length]} flex items-center justify-center text-[11px] font-bold text-white shrink-0`}>
+                          {getInitials(p.student.name)}
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-semibold" style={{ color:'#a78bfa' }}>{p.student.name}</p>
+                          <p className="text-[11px]" style={{ color:'var(--text-faint)' }}>{p.student.course}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-[13px] text-violet-400 font-medium">{p.student.name}</p>
-                        <p className="text-[11px] text-white/30">{p.student.course}</p>
+                    </td>
+                    <td className="px-5 py-3.5 text-[13px]" style={{ color:'var(--text-muted)' }}>
+                      {p.totalAmount.toLocaleString()} <span className="text-[11px]" style={{ color:'var(--text-faint)' }}>SAR</span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <p className="text-[13px] font-semibold" style={{ color:'var(--text)' }}>{p.paidAmount.toLocaleString()} SAR</p>
+                      <div className="h-1.5 rounded-full mt-1.5 overflow-hidden" style={{ width:80, background:'rgba(255,255,255,0.06)' }}>
+                        <div className="h-full rounded-full" style={{ width:`${p.percentage}%`, background:'#10b981' }} />
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <span className="text-[13px] text-white/60">{p.totalAmount.toLocaleString()}</span>
-                    <span className="text-[11px] text-white/25 ml-1">ريال</span>
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <span className="text-[13px] font-semibold text-white/80">{p.paidAmount.toLocaleString()}</span>
-                    <span className="text-[11px] text-white/25 ml-1">ريال</span>
-                    <div className="h-1 bg-white/[0.04] rounded-full mt-1 w-20 ml-auto">
-                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${p.percentage}%` }} />
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <span className={`text-[13px] font-semibold ${p.remaining > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                      {p.remaining.toLocaleString()}
-                    </span>
-                    <span className="text-[11px] text-white/25 ml-1">ريال</span>
-                    {p.dueDate && (
-                      <p className="text-[10px] text-white/25 mt-0.5">
-                        استحقاق: {new Date(p.dueDate).toLocaleDateString('ar-SA')}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <p className="text-[13px] font-semibold" style={{ color: p.remaining > 0 ? '#f87171' : '#10b981' }}>
+                        {p.remaining.toLocaleString()} SAR
                       </p>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <div className="flex items-center gap-1.5 justify-end">
-                      <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
-                      <span className={`text-[12px] font-medium ${badge.text}`}>{badge.label}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-1.5 justify-end">
-                      {p.status !== 'paid' && (
-                        <button
-                          onClick={e => { e.stopPropagation(); setSelectedPayment(p); setPartialAmount(''); setPartialDate(''); setPartialModal(true) }}
-                          className="text-[11px] px-3 py-1.5 rounded-lg border border-white/[0.08] text-white/40 hover:text-violet-400 hover:border-violet-500/30 transition-colors">
-                          إضافة دفع
-                        </button>
+                      {p.dueDate && <p className="text-[10px] mt-0.5" style={{ color:'var(--text-faint)' }}>Due: {new Date(p.dueDate).toLocaleDateString('en-GB')}</p>}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className={`badge ${s.badge}`}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.dot }} />
+                        {s.label}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {isAdmin && (
+                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                          {p.status !== 'paid' && (
+                            <button
+                              onClick={() => { setSelPayment(p); setPartialAmt(''); setPartialDate(''); setPartialModal(true) }}
+                              className="text-[11px] px-3 py-1 rounded-lg transition-colors font-medium"
+                              style={{ border:'1px solid var(--border)', color:'var(--text-muted)' }}
+                              onMouseEnter={e => { e.currentTarget.style.color='#a78bfa'; e.currentTarget.style.borderColor='rgba(124,58,237,0.3)' }}
+                              onMouseLeave={e => { e.currentTarget.style.color='var(--text-muted)'; e.currentTarget.style.borderColor='var(--border)' }}>
+                              + Pay
+                            </button>
+                          )}
+                          <button onClick={() => setDeleteId(p.id)}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+                            style={{ color:'var(--text-faint)' }}
+                            onMouseEnter={e => { e.currentTarget.style.color='#f87171'; e.currentTarget.style.background='rgba(248,113,113,0.1)' }}
+                            onMouseLeave={e => { e.currentTarget.style.color='var(--text-faint)'; e.currentTarget.style.background='transparent' }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                          </button>
+                        </div>
                       )}
-                      <button onClick={e => { e.stopPropagation(); handleDelete(p.id) }}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="3 6 5 6 21 6"/>
-                          <path d="M19 6l-1 14H6L5 6"/>
-                          <path d="M10 11v6M14 11v6"/>
-                          <path d="M9 6V4h6v2"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-            {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-10 text-center text-[13px] text-white/25">لا توجد دفعات</td></tr>
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
       </div>
-
-      {/* Transactions Modal */}
-      {txModal && txPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#111318] border border-white/[0.08] rounded-2xl w-full max-w-md shadow-2xl flex flex-col" style={{ maxHeight: '80vh' }}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-[11px] font-bold text-white">
-                  {getInitials(txPayment.student.name)}
-                </div>
-                <div>
-                  <p className="text-[14px] font-semibold text-white">{txPayment.student.name}</p>
-                  <p className="text-[11px] text-white/35">{txPayment.student.course}</p>
-                </div>
-              </div>
-              <button onClick={() => setTxModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-white/80 hover:bg-white/[0.06]">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 p-4 shrink-0">
-              {[
-                { label: 'الإجمالي', value: txPayment.totalAmount.toLocaleString(), color: 'text-white' },
-                { label: 'المدفوع',  value: txPayment.paidAmount.toLocaleString(),  color: 'text-emerald-400' },
-                { label: 'المتبقي',  value: txPayment.remaining.toLocaleString(),   color: txPayment.remaining > 0 ? 'text-red-400' : 'text-emerald-400' },
-              ].map(s => (
-                <div key={s.label} className="bg-white/[0.03] rounded-xl px-3 py-2.5 text-center">
-                  <p className="text-[11px] text-white/35 mb-1">{s.label}</p>
-                  <p className={`text-[15px] font-bold ${s.color}`}>{s.value}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-4 pb-4">
-              <p className="text-[11px] text-white/35 mb-3 font-medium">سجل الدفعات</p>
-              {txLoading ? (
-                <div className="flex justify-center py-8">
-                  <svg className="animate-spin text-violet-500" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                  </svg>
-                </div>
-              ) : transactions.length === 0 ? (
-                <p className="text-center py-8 text-[13px] text-white/25">لا توجد دفعات مسجلة</p>
-              ) : (
-                <div className="space-y-2">
-                  {transactions.map((tx, i) => (
-                    <div key={tx.id} className="flex items-center justify-between bg-white/[0.03] border border-white/[0.05] rounded-xl px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-6 h-6 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
-                          <span className="text-[10px] text-emerald-400 font-bold">{i + 1}</span>
-                        </div>
-                        <div>
-                          <p className="text-[13px] font-semibold text-emerald-400">+{tx.amount.toLocaleString()} ريال</p>
-                          {tx.note && <p className="text-[11px] text-white/35">{tx.note}</p>}
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-white/30">
-                        {new Date(tx.date).toLocaleDateString('ar-SA', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="px-4 py-3 border-t border-white/[0.06] shrink-0">
-              <button onClick={() => setTxModal(false)}
-                className="w-full py-2.5 rounded-xl border border-white/[0.08] text-[13px] text-white/40 hover:text-white/60 transition-colors">
-                إغلاق
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Payment Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#111318] border border-white/[0.08] rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-[15px] font-semibold text-white">إضافة دفعة جديدة</h2>
-              <button onClick={() => setShowModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-white/80 hover:bg-white/[0.06]">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-            {formError && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-4">
-                <p className="text-[12px] text-red-400">{formError}</p>
-              </div>
-            )}
-            <div className="flex flex-col gap-4">
-              <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl px-4 py-3">
-                <p className="text-[12px] text-violet-300">الرسوم السنوية: <span className="font-bold">{summary.annualFee.toLocaleString()} ريال</span></p>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-medium text-white/40">الطالب</label>
-                <select value={form.studentId} onChange={e => setForm({ ...form, studentId: e.target.value })}
-                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50">
-                  <option value="" disabled className="bg-[#111318]">اختر طالباً...</option>
-                  {students.map(s => <option key={s.id} value={s.id} className="bg-[#111318]">{s.name} — {s.course}</option>)}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-medium text-white/40">المبلغ المدفوع (ريال)</label>
-                <input type="number" value={form.paidAmount} onChange={e => setForm({ ...form, paidAmount: e.target.value })}
-                  placeholder="0"
-                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
-                {form.paidAmount && (
-                  <p className="text-[11px] text-white/30">المتبقي: {(summary.annualFee - Number(form.paidAmount)).toLocaleString()} ريال</p>
-                )}
-              </div>
-              {/* ✅ تاريخ الدفع */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-medium text-white/40">تاريخ الدفع (اختياري)</label>
-                <input type="date" value={form.payDate} onChange={e => setForm({ ...form, payDate: e.target.value })}
-                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-medium text-white/40">تاريخ استحقاق الباقي (اختياري)</label>
-                <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })}
-                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button onClick={() => setShowModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-[13px] text-white/40 hover:text-white/60 transition-colors">إلغاء</button>
-              <button onClick={handleAddPayment} disabled={saving}
-                className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-[13px] font-medium text-white transition-colors">
-                {saving ? 'جاري الحفظ...' : 'إضافة'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Partial Payment Modal */}
-      {partialModal && selectedPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#111318] border border-white/[0.08] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-[15px] font-semibold text-white">إضافة دفع</h2>
-              <button onClick={() => setPartialModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-white/80 hover:bg-white/[0.06]">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-            <div className="bg-white/[0.03] rounded-xl p-4 mb-4">
-              <p className="text-[13px] font-medium text-white/80">{selectedPayment.student.name}</p>
-              <p className="text-[11px] text-white/35 mt-1">المتبقي: <span className="text-red-400 font-semibold">{selectedPayment.remaining.toLocaleString()} ريال</span></p>
-            </div>
-            <div className="flex flex-col gap-3 mb-5">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-medium text-white/40">المبلغ المدفوع الآن (ريال)</label>
-                <input type="number" value={partialAmount} onChange={e => setPartialAmount(e.target.value)}
-                  placeholder="0" max={selectedPayment.remaining}
-                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
-                {partialAmount && Number(partialAmount) >= selectedPayment.remaining && (
-                  <p className="text-[11px] text-emerald-400">✓ سيتم تسجيل الدفع كاملاً</p>
-                )}
-              </div>
-              {/* ✅ تاريخ الدفع */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-medium text-white/40">تاريخ الدفع (اختياري)</label>
-                <input type="date" value={partialDate} onChange={e => setPartialDate(e.target.value)}
-                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 outline-none focus:border-violet-500/50" />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setPartialModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-[13px] text-white/40 hover:text-white/60 transition-colors">إلغاء</button>
-              <button onClick={handlePartialPay} disabled={partialSaving}
-                className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-[13px] font-medium text-white transition-colors">
-                {partialSaving ? 'جاري...' : 'تأكيد'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   )
 }
