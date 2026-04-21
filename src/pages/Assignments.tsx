@@ -32,6 +32,17 @@ interface MetaOffering {
   semester: { id: number; name: string; code: string }
   teacher: { id: number; name: string } | null
 }
+interface ClassSubjectMapItem {
+  className: string
+  subjects: Array<{
+    offeringId: number
+    section: string
+    subject: { id: number; name: string; code: string }
+    semester: { id: number; name: string; code: string }
+    teacher: { id: number; name: string } | null
+    studentsCount: number
+  }>
+}
 interface Submission {
   id: number
   fileUrl: string | null
@@ -160,14 +171,28 @@ export default function Assignments() {
   const canManage = role === 'ADMIN' || role === 'TEACHER'
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [offerings, setOfferings] = useState<MetaOffering[]>([])
+  const [classSubjectMap, setClassSubjectMap] = useState<ClassSubjectMapItem[]>([])
   const [selected, setSelected] = useState<Assignment | null>(null)
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [filter, setFilter] = useState<FilterKey>('all')
+  const [selectedClassName, setSelectedClassName] = useState('')
   const [form, setForm] = useState({ title: '', description: '', subjectOfferingId: '', dueAt: '', maxScore: '100', attachmentUrl: '' })
   const [submitForm, setSubmitForm] = useState({ fileUrl: '', note: '' })
+  const chooseClassLabel = locale === 'ar' ? 'اختر الصف' : 'Choose class'
+  const chooseSubjectAfterClassLabel = locale === 'ar' ? 'اختر الصف أولًا' : 'Choose class first'
+  const noSubjectsForClassLabel = locale === 'ar' ? 'لا توجد مواد متاحة لهذا الصف' : 'No subjects available for this class'
+  const selectedClass = useMemo(
+    () => classSubjectMap.find((item) => item.className === selectedClassName) || null,
+    [classSubjectMap, selectedClassName],
+  )
+  const filteredOfferings = useMemo(() => {
+    if (!selectedClass) return []
+    const allowedOfferingIds = new Set(selectedClass.subjects.map((item) => item.offeringId))
+    return offerings.filter((item) => allowedOfferingIds.has(item.id))
+  }, [offerings, selectedClass])
   const selectedOffering = useMemo(
     () => offerings.find((item) => item.id === Number(form.subjectOfferingId)) || null,
     [offerings, form.subjectOfferingId],
@@ -180,10 +205,19 @@ export default function Assignments() {
       try {
         setLoading(true)
         const endpoint = role === 'STUDENT' ? '/assignments/my' : '/assignments'
-        const [assignmentsRes, offeringsRes] = await Promise.all([api.get(endpoint), canManage ? api.get('/academic/offerings') : Promise.resolve(null)])
+        const [assignmentsRes, offeringsRes, classMapRes] = await Promise.all([
+          api.get(endpoint),
+          canManage ? api.get('/academic/offerings') : Promise.resolve(null),
+          canManage ? api.get('/academic/class-subject-map') : Promise.resolve(null),
+        ])
         if (!active) return
         setAssignments(assignmentsRes.data.assignments)
         if (offeringsRes) setOfferings(offeringsRes.data.offerings ?? [])
+        if (classMapRes) {
+          const classes = classMapRes.data.classes ?? []
+          setClassSubjectMap(classes)
+          if (classes.length > 0) setSelectedClassName(classes[0].className)
+        }
       } catch {
         if (active) toast.error(copy.loadError)
       } finally {
@@ -214,9 +248,15 @@ export default function Assignments() {
   }
 
   async function createAssignment() {
+    if (!form.subjectOfferingId) {
+      toast.error(chooseSubjectAfterClassLabel)
+      return
+    }
+
     try {
       await api.post('/assignments', { ...form, subjectOfferingId: Number(form.subjectOfferingId), maxScore: Number(form.maxScore) })
       setShowCreate(false)
+      setSelectedClassName(classSubjectMap[0]?.className || '')
       setForm({ title: '', description: '', subjectOfferingId: '', dueAt: '', maxScore: '100', attachmentUrl: '' })
       await reloadAssignments()
       toast.success(copy.createSuccess)
@@ -261,13 +301,22 @@ export default function Assignments() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={copy.createAssignment} footer={<div className="flex gap-2.5"><button onClick={() => setShowCreate(false)} className="btn-ghost flex-1 py-2.5 text-[13px] rounded-xl">{copy.cancel}</button><button onClick={createAssignment} disabled={createBlockedByTeacher} className="btn-primary flex-1 py-2.5 text-[13px] rounded-xl">{copy.create}</button></div>}>
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={copy.createAssignment} footer={<div className="flex gap-2.5"><button onClick={() => setShowCreate(false)} className="btn-ghost flex-1 py-2.5 text-[13px] rounded-xl">{copy.cancel}</button><button onClick={createAssignment} disabled={createBlockedByTeacher || !form.subjectOfferingId} className="btn-primary flex-1 py-2.5 text-[13px] rounded-xl">{copy.create}</button></div>}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <input className="input" placeholder={copy.title} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
-          <select className="input" value={form.subjectOfferingId} onChange={e => setForm({ ...form, subjectOfferingId: e.target.value })}>
-            <option value="">{copy.chooseSubject}</option>
-            {offerings.map(item => <option key={item.id} value={item.id}>{item.subject.name} ({item.subject.code}) - {item.semester.name} - {item.section}</option>)}
+          <select className="input" value={selectedClassName} onChange={e => { setSelectedClassName(e.target.value); setForm({ ...form, subjectOfferingId: '' }) }}>
+            <option value="">{chooseClassLabel}</option>
+            {classSubjectMap.map(item => <option key={item.className} value={item.className}>{item.className}</option>)}
           </select>
+          <select className="input md:col-span-2" disabled={!selectedClassName} value={form.subjectOfferingId} onChange={e => setForm({ ...form, subjectOfferingId: e.target.value })}>
+            <option value="">{selectedClassName ? copy.chooseSubject : chooseSubjectAfterClassLabel}</option>
+            {filteredOfferings.map(item => <option key={item.id} value={item.id}>{item.subject.name} ({item.subject.code}) - {item.semester.name} - {item.section}</option>)}
+          </select>
+          {selectedClassName && filteredOfferings.length === 0 && (
+            <div className="md:col-span-2 rounded-xl px-3.5 py-3 text-[12px]" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.18)', color: '#fbbf24' }}>
+              {noSubjectsForClassLabel}
+            </div>
+          )}
           {selectedOffering && (
             <div className="md:col-span-2 rounded-xl px-3.5 py-3 text-[12px]" style={{ background: createBlockedByTeacher ? 'rgba(248,113,113,0.08)' : 'rgba(16,185,129,0.08)', border: `1px solid ${createBlockedByTeacher ? 'rgba(248,113,113,0.18)' : 'rgba(16,185,129,0.18)'}`, color: createBlockedByTeacher ? '#f87171' : 'var(--text-muted)' }}>
               {selectedOffering.teacher
