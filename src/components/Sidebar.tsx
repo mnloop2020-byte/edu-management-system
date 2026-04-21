@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/api'
+import { useLocale } from '../hooks/useLocale'
 
 interface Counts { students: number; teachers: number; payments: number }
 
@@ -42,6 +43,28 @@ const navItems = [
     ),
   },
   {
+    path: '/calendar',
+    label: 'Calendar',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    ),
+  },
+  {
+    path: '/assignments',
+    label: 'Assignments',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+    ),
+  },
+  {
     path: '/attendance',
     label: 'Attendance',
     icon: (
@@ -77,14 +100,109 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    path: '/automation',
+    label: 'Automation',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="6" cy="12" r="2"/>
+        <circle cx="18" cy="6" r="2"/>
+        <circle cx="18" cy="18" r="2"/>
+        <path d="M8 12h4M14 12l2-4M14 12l2 6"/>
+      </svg>
+    ),
+  },
+  {
+    path: '/teacher-performance',
+    label: 'Performance',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="20" x2="12" y2="10"/>
+        <line x1="18" y1="20" x2="18" y2="4"/>
+        <line x1="6" y1="20" x2="6" y2="14"/>
+      </svg>
+    ),
+  },
+  {
+    path: '/gradebook',
+    label: 'Gradebook',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+    ),
+  },
+  {
+    path: '/communications',
+    label: 'Communications',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    ),
+  },
+  {
+    path: '/parents',
+    label: 'Parents',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+  },
+  {
+    path: '/transcripts',
+    label: 'Transcripts',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+    ),
+  },
+  {
+    path: '/audit-log',
+    label: 'Audit Log',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 20V10"/>
+        <path d="M18 20V4"/>
+        <path d="M6 20v-4"/>
+      </svg>
+    ),
+  },
 ]
 
 export default function Sidebar() {
   const location  = useLocation()
   const { user, logout } = useAuth()
+  const { text, isRtl } = useLocale()
   const [collapsed, setCollapsed] = useState(false)
   const [hovered,   setHovered]   = useState<string | null>(null)
   const [counts,    setCounts]    = useState<Counts>({ students: 0, teachers: 0, payments: 0 })
+  const navLabelByPath: Record<string, string> = {
+    '/': text.nav.dashboard,
+    '/students': text.nav.students,
+    '/teachers': text.nav.teachers,
+    '/calendar': text.nav.calendar,
+    '/assignments': text.nav.assignments,
+    '/attendance': text.nav.attendance,
+    '/payments': text.nav.payments,
+    '/reports': text.nav.reports,
+    '/automation': text.nav.automation,
+    '/teacher-performance': text.nav.performance,
+    '/gradebook': text.nav.gradebook,
+    '/communications': text.nav.communications,
+    '/parents': text.nav.parents,
+    '/transcripts': text.nav.transcripts,
+    '/audit-log': text.nav.auditLog,
+  }
 
   const initials = user?.name
     ? user.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
@@ -106,7 +224,8 @@ export default function Sidebar() {
       style={{
         width: collapsed ? 64 : 224,
         background: 'var(--surface)',
-        borderRight: '1px solid var(--border)',
+        borderRight: isRtl ? 'none' : '1px solid var(--border)',
+        borderLeft: isRtl ? '1px solid var(--border)' : 'none',
       }}
     >
       {/* ── Logo ── */}
@@ -129,7 +248,7 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="animate-fade-in overflow-hidden">
             <p className="text-[14px] font-bold leading-none tracking-tight" style={{ color: 'var(--text)' }}>EduSystem</p>
-            <p className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color: 'var(--text-faint)' }}>Management</p>
+            <p className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color: 'var(--text-faint)' }}>{text.nav.management}</p>
           </div>
         )}
       </div>
@@ -139,6 +258,8 @@ export default function Sidebar() {
         onClick={() => setCollapsed(c => !c)}
         className="absolute -right-3 top-[50px] w-6 h-6 rounded-full flex items-center justify-center z-20 transition-all hover:scale-110"
         style={{
+          right: isRtl ? 'auto' : -12,
+          left: isRtl ? -12 : 'auto',
           background: 'var(--surface)',
           border: '1px solid var(--border)',
           color: 'var(--text-muted)',
@@ -167,8 +288,8 @@ export default function Sidebar() {
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-faint)', flexShrink: 0 }}>
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
-            <span className="text-[12px]" style={{ color: 'var(--text-faint)' }}>Search...</span>
-            <kbd className="ml-auto text-[9px] border rounded px-1 py-0.5" style={{ color: 'var(--text-faint)', borderColor: 'var(--border)' }}>⌘K</kbd>
+            <span className="text-[12px]" style={{ color: 'var(--text-faint)' }}>{text.shell.search}</span>
+            <kbd className="ml-auto text-[9px] border rounded px-1 py-0.5" style={{ color: 'var(--text-faint)', borderColor: 'var(--border)' }}>Ctrl+K</kbd>
           </div>
         </div>
       )}
@@ -176,7 +297,7 @@ export default function Sidebar() {
       {/* ── Section label ── */}
       {!collapsed && (
         <p className="px-4 pt-1 pb-1 text-[9px] font-bold uppercase tracking-[0.15em]" style={{ color: 'var(--text-faint)' }}>
-          Navigation
+          {text.nav.navigation}
         </p>
       )}
 
@@ -207,8 +328,13 @@ export default function Sidebar() {
                 {/* Active left accent */}
                 {isActive && (
                   <span
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
-                    style={{ background: 'linear-gradient(to bottom, #a78bfa, #7c3aed)' }}
+                    className="absolute top-1/2 -translate-y-1/2 w-[3px] h-5"
+                    style={{
+                      left: isRtl ? 'auto' : 0,
+                      right: isRtl ? 0 : 'auto',
+                      borderRadius: isRtl ? '999px 0 0 999px' : '0 999px 999px 0',
+                      background: 'linear-gradient(to bottom, #a78bfa, #7c3aed)',
+                    }}
                   />
                 )}
 
@@ -227,7 +353,7 @@ export default function Sidebar() {
                 {!collapsed && (
                   <>
                     <span className="text-[13px] font-medium flex-1 whitespace-nowrap" style={{ color: isActive ? '#e2e0ff' : 'var(--text-muted)' }}>
-                      {item.label}
+                      {navLabelByPath[item.path] || item.label}
                     </span>
                     {badge > 0 && (
                       <span
@@ -247,10 +373,18 @@ export default function Sidebar() {
               {/* Tooltip when collapsed */}
               {collapsed && isHov && (
                 <div
-                  className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 rounded-xl text-[12px] font-medium whitespace-nowrap z-50 shadow-2xl pointer-events-none animate-scale-in"
-                  style={{ background: 'var(--surface-2,#1C1F27)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                  className="absolute top-1/2 -translate-y-1/2 px-3 py-2 rounded-xl text-[12px] font-medium whitespace-nowrap z-50 shadow-2xl pointer-events-none animate-scale-in"
+                  style={{
+                    left: isRtl ? 'auto' : '100%',
+                    right: isRtl ? '100%' : 'auto',
+                    marginLeft: isRtl ? 0 : 12,
+                    marginRight: isRtl ? 12 : 0,
+                    background: 'var(--surface-2,#1C1F27)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text)',
+                  }}
                 >
-                  {item.label}
+                  {navLabelByPath[item.path] || item.label}
                   {badge > 0 && (
                     <span className="ml-2 text-[10px]" style={{ color: item.alert ? '#f87171' : 'var(--text-muted)' }}>
                       {badge}
@@ -285,7 +419,7 @@ export default function Sidebar() {
               </div>
               <button
                 onClick={logout}
-                title="Sign out"
+                title={text.shell.signOut}
                 className="w-6 h-6 flex items-center justify-center rounded-lg transition-colors"
                 style={{ color: 'var(--text-faint)' }}
                 onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(248,113,113,0.1)' }}
