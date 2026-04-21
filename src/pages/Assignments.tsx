@@ -184,6 +184,12 @@ export default function Assignments() {
   const chooseClassLabel = locale === 'ar' ? 'اختر الصف' : 'Choose class'
   const chooseSubjectAfterClassLabel = locale === 'ar' ? 'اختر الصف أولًا' : 'Choose class first'
   const noSubjectsForClassLabel = locale === 'ar' ? 'لا توجد مواد متاحة لهذا الصف' : 'No subjects available for this class'
+  const teacherLabel = locale === 'ar' ? 'المعلم' : 'Teacher'
+  const termLabel = locale === 'ar' ? 'الفصل' : 'Term'
+  const teacherMissingLabel = locale === 'ar' ? 'لم يحدد المعلم بعد' : 'Teacher not assigned'
+  const linkTeacherFirstLabel = locale === 'ar'
+    ? 'اربط هذه المادة بمعلم أولًا قبل إنشاء الواجب'
+    : 'Link this subject to a teacher first before creating assignments'
   const selectedClass = useMemo(
     () => classSubjectMap.find((item) => item.className === selectedClassName) || null,
     [classSubjectMap, selectedClassName],
@@ -335,7 +341,7 @@ export default function Assignments() {
           </select>
           <select className="input" disabled={!selectedClassName} value={form.subjectOfferingId} onChange={e => setForm({ ...form, subjectOfferingId: e.target.value })}>
             <option value="">{selectedClassName ? copy.chooseSubject : chooseSubjectAfterClassLabel}</option>
-            {filteredOfferings.map(item => <option key={item.id} value={item.id}>{item.subject.name} ({item.subject.code}) - {item.semester.name} - {item.section}</option>)}
+            {filteredOfferings.map(item => <option key={item.id} value={item.id}>{item.subject.name}</option>)}
           </select>
           <input className="input md:col-span-2" placeholder={copy.title} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
           {selectedClassName && filteredOfferings.length === 0 && (
@@ -344,10 +350,10 @@ export default function Assignments() {
             </div>
           )}
           {selectedOffering && (
-            <div className="md:col-span-2 rounded-xl px-3.5 py-3 text-[12px]" style={{ background: createBlockedByTeacher ? 'rgba(248,113,113,0.08)' : 'rgba(16,185,129,0.08)', border: `1px solid ${createBlockedByTeacher ? 'rgba(248,113,113,0.18)' : 'rgba(16,185,129,0.18)'}`, color: createBlockedByTeacher ? '#f87171' : 'var(--text-muted)' }}>
-              {selectedOffering.teacher
-                ? `Teacher: ${selectedOffering.teacher.name}`
-                : 'This subject is not linked to a teacher yet. Link a teacher first to create assignments as admin.'}
+            <div className="md:col-span-2 rounded-xl px-3.5 py-3 text-[12px] space-y-1.5" style={{ background: createBlockedByTeacher ? 'rgba(248,113,113,0.08)' : 'rgba(255,255,255,0.04)', border: `1px solid ${createBlockedByTeacher ? 'rgba(248,113,113,0.18)' : 'var(--border)'}`, color: createBlockedByTeacher ? '#f87171' : 'var(--text-muted)' }}>
+              <p>{teacherLabel}: {selectedOffering.teacher?.name || teacherMissingLabel}</p>
+              <p>{termLabel}: {selectedOffering.semester.name} - {selectedOffering.section}</p>
+              {createBlockedByTeacher && <p>{linkTeacherFirstLabel}</p>}
             </div>
           )}
           <input className="input md:col-span-2" placeholder={copy.description} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
