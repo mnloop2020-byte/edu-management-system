@@ -7,8 +7,8 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Modal } from '../components/ui/Modal'
 import { EmptyState } from '../components/ui/EmptyState'
 
-interface Teacher { id: number; name: string; subject: string; phone: string | null; classes: number }
-type TeacherFormKey = 'name' | 'subject' | 'phone'
+interface Teacher { id: number; name: string; subject: string; phone: string | null; classes: number; avatarUrl: string | null }
+type TeacherFormKey = 'name' | 'subject' | 'phone' | 'avatarUrl'
 
 const TEACHER_PHOTOS = [
   'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&q=75',
@@ -47,6 +47,8 @@ function getCopy(locale: 'ar' | 'en') {
         subjectPlaceholder: 'مثال: الرياضيات',
         phone: 'الهاتف',
         phonePlaceholder: '05xxxxxxxx',
+        avatar: 'رابط صورة المعلم',
+        avatarPlaceholder: 'https://...',
         numberOfClasses: 'عدد الصفوف',
         totalTeachers: 'إجمالي المعلمين',
         totalClasses: 'إجمالي الصفوف',
@@ -79,6 +81,8 @@ function getCopy(locale: 'ar' | 'en') {
         subjectPlaceholder: 'e.g. Mathematics',
         phone: 'Phone',
         phonePlaceholder: '05xxxxxxxx',
+        avatar: 'Teacher image URL',
+        avatarPlaceholder: 'https://...',
         numberOfClasses: 'Number of Classes',
         totalTeachers: 'Total Teachers',
         totalClasses: 'Total Classes',
@@ -95,10 +99,10 @@ function getInitials(name: string) {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-function Avatar({ name, index }: { name: string; index: number }) {
+function Avatar({ name, index, avatarUrl }: { name: string; index: number; avatarUrl?: string | null }) {
   const [err, setErr] = useState(false)
   const color = ACCENT_COLORS[index % ACCENT_COLORS.length]
-  const photo = TEACHER_PHOTOS[index % TEACHER_PHOTOS.length]
+  const photo = avatarUrl || TEACHER_PHOTOS[index % TEACHER_PHOTOS.length]
 
   if (!err) return (
     <img
@@ -133,7 +137,7 @@ export default function Teachers() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ name: '', subject: '', phone: '', classes: '0' })
+  const [form, setForm] = useState({ name: '', subject: '', phone: '', avatarUrl: '', classes: '0' })
   const [editId, setEditId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
@@ -148,14 +152,20 @@ export default function Teachers() {
 
   useEffect(() => { void fetchTeachers() }, [fetchTeachers])
 
-  function openAdd() { setForm({ name: '', subject: '', phone: '', classes: '0' }); setEditId(null); setShowModal(true) }
-  function openEdit(t: Teacher) { setForm({ name: t.name, subject: t.subject, phone: t.phone || '', classes: String(t.classes) }); setEditId(t.id); setShowModal(true) }
+  function openAdd() { setForm({ name: '', subject: '', phone: '', avatarUrl: '', classes: '0' }); setEditId(null); setShowModal(true) }
+  function openEdit(t: Teacher) { setForm({ name: t.name, subject: t.subject, phone: t.phone || '', avatarUrl: t.avatarUrl || '', classes: String(t.classes) }); setEditId(t.id); setShowModal(true) }
 
   async function handleSave() {
     if (!isAdmin || !form.name || !form.subject) return
     setSaving(true)
     try {
-      const payload = { name: form.name, subject: form.subject, phone: form.phone, classes: Number(form.classes) }
+      const payload = {
+        name: form.name,
+        subject: form.subject,
+        phone: form.phone,
+        avatarUrl: form.avatarUrl || null,
+        classes: Number(form.classes),
+      }
       if (editId !== null) await api.put(`/teachers/${editId}`, payload)
       else await api.post('/teachers', payload)
       await fetchTeachers()
@@ -188,6 +198,7 @@ export default function Teachers() {
     { label: copy.fullName, key: 'name', placeholder: copy.teacherName },
     { label: copy.subject, key: 'subject', placeholder: copy.subjectPlaceholder },
     { label: copy.phone, key: 'phone', placeholder: copy.phonePlaceholder },
+    { label: copy.avatar, key: 'avatarUrl', placeholder: copy.avatarPlaceholder },
   ]
 
   return (
@@ -280,7 +291,7 @@ export default function Teachers() {
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div style={{ flexShrink: 0 }}>
-                    <Avatar name={t.name} index={i} />
+                    <Avatar name={t.name} index={i} avatarUrl={t.avatarUrl} />
                   </div>
                   <div>
                     <p className="text-[14px] font-bold leading-snug" style={{ color: 'var(--text)' }}>{t.name}</p>

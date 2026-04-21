@@ -101,18 +101,6 @@ const navItems = [
     ),
   },
   {
-    path: '/automation',
-    label: 'Automation',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="6" cy="12" r="2"/>
-        <circle cx="18" cy="6" r="2"/>
-        <circle cx="18" cy="18" r="2"/>
-        <path d="M8 12h4M14 12l2-4M14 12l2 6"/>
-      </svg>
-    ),
-  },
-  {
     path: '/teacher-performance',
     label: 'Performance',
     icon: (
@@ -195,7 +183,6 @@ export default function Sidebar() {
     '/attendance': text.nav.attendance,
     '/payments': text.nav.payments,
     '/reports': text.nav.reports,
-    '/automation': text.nav.automation,
     '/teacher-performance': text.nav.performance,
     '/gradebook': text.nav.gradebook,
     '/communications': text.nav.communications,

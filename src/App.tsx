@@ -19,7 +19,6 @@ const Calendar = lazy(() => import('./pages/Calendar'))
 const Assignments = lazy(() => import('./pages/Assignments'))
 const TeacherPerformance = lazy(() => import('./pages/TeacherPerformance'))
 const StudentProfile = lazy(() => import('./pages/StudentProfile'))
-const WorkflowBuilder = lazy(() => import('./pages/WorkflowBuilder'))
 const Gradebook = lazy(() => import('./pages/Gradebook'))
 const Communications = lazy(() => import('./pages/Communications'))
 const Parents = lazy(() => import('./pages/Parents'))
@@ -508,7 +507,6 @@ function Layout() {
               <Route path="/payments"   element={<Payments />} />
               <Route path="/reports"    element={<Reports />} />
               <Route path="/teacher-performance" element={<TeacherPerformance />} />
-              <Route path="/automation" element={<WorkflowBuilder />} />
               <Route path="/gradebook" element={<Gradebook />} />
               <Route path="/communications" element={<Communications />} />
               <Route path="/parents" element={<Parents />} />

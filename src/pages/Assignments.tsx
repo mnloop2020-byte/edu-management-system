@@ -227,6 +227,32 @@ export default function Assignments() {
     return () => { active = false }
   }, [role, canManage, copy.loadError])
 
+  useEffect(() => {
+    if (!showCreate) return
+    if (!selectedClassName && classSubjectMap.length > 0) {
+      setSelectedClassName(classSubjectMap[0].className)
+    }
+  }, [showCreate, selectedClassName, classSubjectMap])
+
+  useEffect(() => {
+    if (!showCreate) return
+
+    setForm((current) => {
+      if (!selectedClass) {
+        if (!current.subjectOfferingId) return current
+        return { ...current, subjectOfferingId: '' }
+      }
+
+      const allowedIds = new Set(filteredOfferings.map((item) => String(item.id)))
+      if (current.subjectOfferingId && allowedIds.has(current.subjectOfferingId)) {
+        return current
+      }
+
+      const first = filteredOfferings[0]
+      return { ...current, subjectOfferingId: first ? String(first.id) : '' }
+    })
+  }, [showCreate, selectedClass, filteredOfferings])
+
   async function reloadAssignments() {
     const endpoint = role === 'STUDENT' ? '/assignments/my' : '/assignments'
     const res = await api.get(endpoint)
@@ -303,15 +329,15 @@ export default function Assignments() {
     <div className="space-y-5 animate-fade-in">
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title={copy.createAssignment} footer={<div className="flex gap-2.5"><button onClick={() => setShowCreate(false)} className="btn-ghost flex-1 py-2.5 text-[13px] rounded-xl">{copy.cancel}</button><button onClick={createAssignment} disabled={createBlockedByTeacher || !form.subjectOfferingId} className="btn-primary flex-1 py-2.5 text-[13px] rounded-xl">{copy.create}</button></div>}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <input className="input" placeholder={copy.title} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
           <select className="input" value={selectedClassName} onChange={e => { setSelectedClassName(e.target.value); setForm({ ...form, subjectOfferingId: '' }) }}>
             <option value="">{chooseClassLabel}</option>
             {classSubjectMap.map(item => <option key={item.className} value={item.className}>{item.className}</option>)}
           </select>
-          <select className="input md:col-span-2" disabled={!selectedClassName} value={form.subjectOfferingId} onChange={e => setForm({ ...form, subjectOfferingId: e.target.value })}>
+          <select className="input" disabled={!selectedClassName} value={form.subjectOfferingId} onChange={e => setForm({ ...form, subjectOfferingId: e.target.value })}>
             <option value="">{selectedClassName ? copy.chooseSubject : chooseSubjectAfterClassLabel}</option>
             {filteredOfferings.map(item => <option key={item.id} value={item.id}>{item.subject.name} ({item.subject.code}) - {item.semester.name} - {item.section}</option>)}
           </select>
+          <input className="input md:col-span-2" placeholder={copy.title} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
           {selectedClassName && filteredOfferings.length === 0 && (
             <div className="md:col-span-2 rounded-xl px-3.5 py-3 text-[12px]" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.18)', color: '#fbbf24' }}>
               {noSubjectsForClassLabel}
