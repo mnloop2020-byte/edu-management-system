@@ -32,17 +32,6 @@ interface MetaOffering {
   semester: { id: number; name: string; code: string }
   teacher: { id: number; name: string } | null
 }
-interface ClassSubjectMapItem {
-  className: string
-  subjects: Array<{
-    offeringId: number
-    section: string
-    subject: { id: number; name: string; code: string }
-    semester: { id: number; name: string; code: string }
-    teacher: { id: number; name: string } | null
-    studentsCount: number
-  }>
-}
 interface Submission {
   id: number
   fileUrl: string | null
@@ -171,34 +160,34 @@ export default function Assignments() {
   const canManage = role === 'ADMIN' || role === 'TEACHER'
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [offerings, setOfferings] = useState<MetaOffering[]>([])
-  const [classSubjectMap, setClassSubjectMap] = useState<ClassSubjectMapItem[]>([])
   const [selected, setSelected] = useState<Assignment | null>(null)
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [filter, setFilter] = useState<FilterKey>('all')
-  const [selectedClassName, setSelectedClassName] = useState('')
   const [form, setForm] = useState({ title: '', description: '', subjectOfferingId: '', dueAt: '', maxScore: '100', attachmentUrl: '' })
   const [submitForm, setSubmitForm] = useState({ fileUrl: '', note: '' })
-  const chooseClassLabel = locale === 'ar' ? 'اختر الصف' : 'Choose class'
-  const chooseSubjectAfterClassLabel = locale === 'ar' ? 'اختر الصف أولًا' : 'Choose class first'
-  const noSubjectsForClassLabel = locale === 'ar' ? 'لا توجد مواد متاحة لهذا الصف' : 'No subjects available for this class'
+  const noSubjectsLabel = locale === 'ar' ? 'لا توجد مواد متاحة' : 'No subjects available'
   const teacherLabel = locale === 'ar' ? 'المعلم' : 'Teacher'
   const termLabel = locale === 'ar' ? 'الفصل' : 'Term'
   const teacherMissingLabel = locale === 'ar' ? 'لم يحدد المعلم بعد' : 'Teacher not assigned'
   const linkTeacherFirstLabel = locale === 'ar'
     ? 'اربط هذه المادة بمعلم أولًا قبل إنشاء الواجب'
     : 'Link this subject to a teacher first before creating assignments'
-  const selectedClass = useMemo(
-    () => classSubjectMap.find((item) => item.className === selectedClassName) || null,
-    [classSubjectMap, selectedClassName],
-  )
-  const filteredOfferings = useMemo(() => {
-    if (!selectedClass) return []
-    const allowedOfferingIds = new Set(selectedClass.subjects.map((item) => item.offeringId))
-    return offerings.filter((item) => allowedOfferingIds.has(item.id))
-  }, [offerings, selectedClass])
+  const subjectOptions = useMemo(() => {
+    const seen = new Set<number>()
+    const result: MetaOffering[] = []
+
+    for (const offering of offerings) {
+      const subjectId = offering.subject.id
+      if (seen.has(subjectId)) continue
+      seen.add(subjectId)
+      result.push(offering)
+    }
+
+    return result
+  }, [offerings])
   const selectedOffering = useMemo(
     () => offerings.find((item) => item.id === Number(form.subjectOfferingId)) || null,
     [offerings, form.subjectOfferingId],
@@ -211,19 +200,13 @@ export default function Assignments() {
       try {
         setLoading(true)
         const endpoint = role === 'STUDENT' ? '/assignments/my' : '/assignments'
-        const [assignmentsRes, offeringsRes, classMapRes] = await Promise.all([
+        const [assignmentsRes, offeringsRes] = await Promise.all([
           api.get(endpoint),
           canManage ? api.get('/academic/offerings') : Promise.resolve(null),
-          canManage ? api.get('/academic/class-subject-map') : Promise.resolve(null),
         ])
         if (!active) return
         setAssignments(assignmentsRes.data.assignments)
         if (offeringsRes) setOfferings(offeringsRes.data.offerings ?? [])
-        if (classMapRes) {
-          const classes = classMapRes.data.classes ?? []
-          setClassSubjectMap(classes)
-          if (classes.length > 0) setSelectedClassName(classes[0].className)
-        }
       } catch {
         if (active) toast.error(copy.loadError)
       } finally {
@@ -235,29 +218,17 @@ export default function Assignments() {
 
   useEffect(() => {
     if (!showCreate) return
-    if (!selectedClassName && classSubjectMap.length > 0) {
-      setSelectedClassName(classSubjectMap[0].className)
-    }
-  }, [showCreate, selectedClassName, classSubjectMap])
-
-  useEffect(() => {
-    if (!showCreate) return
 
     setForm((current) => {
-      if (!selectedClass) {
-        if (!current.subjectOfferingId) return current
-        return { ...current, subjectOfferingId: '' }
-      }
-
-      const allowedIds = new Set(filteredOfferings.map((item) => String(item.id)))
+      const allowedIds = new Set(subjectOptions.map((item) => String(item.id)))
       if (current.subjectOfferingId && allowedIds.has(current.subjectOfferingId)) {
         return current
       }
 
-      const first = filteredOfferings[0]
+      const first = subjectOptions[0]
       return { ...current, subjectOfferingId: first ? String(first.id) : '' }
     })
-  }, [showCreate, selectedClass, filteredOfferings])
+  }, [showCreate, subjectOptions])
 
   async function reloadAssignments() {
     const endpoint = role === 'STUDENT' ? '/assignments/my' : '/assignments'
@@ -281,14 +252,13 @@ export default function Assignments() {
 
   async function createAssignment() {
     if (!form.subjectOfferingId) {
-      toast.error(chooseSubjectAfterClassLabel)
+      toast.error(copy.chooseSubject)
       return
     }
 
     try {
       await api.post('/assignments', { ...form, subjectOfferingId: Number(form.subjectOfferingId), maxScore: Number(form.maxScore) })
       setShowCreate(false)
-      setSelectedClassName(classSubjectMap[0]?.className || '')
       setForm({ title: '', description: '', subjectOfferingId: '', dueAt: '', maxScore: '100', attachmentUrl: '' })
       await reloadAssignments()
       toast.success(copy.createSuccess)
@@ -335,18 +305,14 @@ export default function Assignments() {
     <div className="space-y-5 animate-fade-in">
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title={copy.createAssignment} footer={<div className="flex gap-2.5"><button onClick={() => setShowCreate(false)} className="btn-ghost flex-1 py-2.5 text-[13px] rounded-xl">{copy.cancel}</button><button onClick={createAssignment} disabled={createBlockedByTeacher || !form.subjectOfferingId} className="btn-primary flex-1 py-2.5 text-[13px] rounded-xl">{copy.create}</button></div>}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <select className="input" value={selectedClassName} onChange={e => { setSelectedClassName(e.target.value); setForm({ ...form, subjectOfferingId: '' }) }}>
-            <option value="">{chooseClassLabel}</option>
-            {classSubjectMap.map(item => <option key={item.className} value={item.className}>{item.className}</option>)}
-          </select>
-          <select className="input" disabled={!selectedClassName} value={form.subjectOfferingId} onChange={e => setForm({ ...form, subjectOfferingId: e.target.value })}>
-            <option value="">{selectedClassName ? copy.chooseSubject : chooseSubjectAfterClassLabel}</option>
-            {filteredOfferings.map(item => <option key={item.id} value={item.id}>{item.subject.name}</option>)}
+          <select className="input md:col-span-2" value={form.subjectOfferingId} onChange={e => setForm({ ...form, subjectOfferingId: e.target.value })}>
+            <option value="">{copy.chooseSubject}</option>
+            {subjectOptions.map(item => <option key={item.id} value={item.id}>{item.subject.name}</option>)}
           </select>
           <input className="input md:col-span-2" placeholder={copy.title} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
-          {selectedClassName && filteredOfferings.length === 0 && (
+          {subjectOptions.length === 0 && (
             <div className="md:col-span-2 rounded-xl px-3.5 py-3 text-[12px]" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.18)', color: '#fbbf24' }}>
-              {noSubjectsForClassLabel}
+              {noSubjectsLabel}
             </div>
           )}
           {selectedOffering && (
