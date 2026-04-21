@@ -1,8 +1,15 @@
-import { useEffect, useState } from 'react'
+import { isAxiosError } from 'axios'
+import { useEffect, useMemo, useState } from 'react'
 import api from '../api/api'
 import { EmptyState } from '../components/ui/EmptyState'
+import { toast } from '../components/ui/Toast'
 
-interface StudentOption { id: number; name: string }
+interface StudentOption {
+  id: number
+  name: string
+  status?: string
+  subjectsCount?: number
+}
 interface TranscriptPayload {
   student: { id: number; name: string; course: string; status: string; joinedAt: string }
   summary: {
@@ -29,15 +36,51 @@ export default function Transcripts() {
   const [students, setStudents] = useState<StudentOption[]>([])
   const [selectedStudentId, setSelectedStudentId] = useState<string>('')
   const [transcript, setTranscript] = useState<TranscriptPayload | null>(null)
+  const [loadingStudents, setLoadingStudents] = useState(true)
+
+  const normalizedStudents = useMemo(() => {
+    const seen = new Set<number>()
+    return students.filter((student) => {
+      if (!student || !Number.isFinite(student.id) || seen.has(student.id)) return false
+      seen.add(student.id)
+      return true
+    })
+  }, [students])
 
   useEffect(() => {
     let active = true
     ;(async () => {
-      const res = await api.get('/students')
-      if (!active) return
-      const items = (res.data.students ?? []).map((item: StudentOption) => ({ id: item.id, name: item.name }))
-      setStudents(items)
-      if (items[0]) setSelectedStudentId(String(items[0].id))
+      try {
+        setLoadingStudents(true)
+        const res = await api.get('/transcripts/students')
+        if (!active) return
+        const items = (res.data.students ?? []).map((item: StudentOption) => ({
+          id: item.id,
+          name: item.name,
+          status: item.status,
+          subjectsCount: item.subjectsCount ?? 0,
+        }))
+        setStudents(items)
+        if (items[0]) setSelectedStudentId(String(items[0].id))
+      } catch (error: unknown) {
+        if (!active) return
+        try {
+          const fallbackRes = await api.get('/students')
+          if (!active) return
+          const fallbackItems = (fallbackRes.data.students ?? []).map((item: StudentOption) => ({ id: item.id, name: item.name }))
+          setStudents(fallbackItems)
+          if (fallbackItems[0]) setSelectedStudentId(String(fallbackItems[0].id))
+        } catch {
+          toast.error(
+            isAxiosError(error)
+              ? error.response?.data?.message || 'Failed to load students'
+              : 'Failed to load students',
+          )
+          setStudents([])
+        }
+      } finally {
+        if (active) setLoadingStudents(false)
+      }
     })()
     return () => { active = false }
   }, [])
@@ -46,14 +89,28 @@ export default function Transcripts() {
     if (!selectedStudentId) return
     let active = true
     ;(async () => {
-      const res = await api.get(`/transcripts/student/${selectedStudentId}`)
-      if (!active) return
-      setTranscript(res.data)
+      try {
+        const res = await api.get(`/transcripts/student/${selectedStudentId}`)
+        if (!active) return
+        setTranscript(res.data)
+      } catch (error: unknown) {
+        if (!active) return
+        setTranscript(null)
+        toast.error(
+          isAxiosError(error)
+            ? error.response?.data?.message || 'Failed to load transcript'
+            : 'Failed to load transcript',
+        )
+      }
     })()
     return () => { active = false }
   }, [selectedStudentId])
 
-  if (students.length === 0) {
+  if (loadingStudents && normalizedStudents.length === 0) {
+    return <div className="card p-6 text-[13px]" style={{ color: 'var(--text-muted)' }}>Loading transcripts...</div>
+  }
+
+  if (!loadingStudents && normalizedStudents.length === 0) {
     return <div className="card"><EmptyState title="No students available" message="Create students to generate transcripts." /></div>
   }
 
@@ -65,8 +122,12 @@ export default function Transcripts() {
           <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>Academic summary ready for review and printing</p>
         </div>
         <div className="flex items-center gap-3">
-          <select className="input min-w-[220px]" value={selectedStudentId} onChange={(e) => setSelectedStudentId(e.target.value)}>
-            {students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}
+          <select className="input min-w-[260px]" value={selectedStudentId} onChange={(e) => setSelectedStudentId(e.target.value)}>
+            {normalizedStudents.map((student) => (
+              <option key={student.id} value={student.id}>
+                {student.name}{student.subjectsCount !== undefined ? ` (${student.subjectsCount})` : ''}
+              </option>
+            ))}
           </select>
           <button onClick={() => window.print()} className="btn-primary px-4 py-2 rounded-xl text-[12px]">Print</button>
         </div>
