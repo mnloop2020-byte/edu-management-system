@@ -18,10 +18,41 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
+const TOKEN_KEY = 'token'
+const USER_KEY = 'user'
+const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000
+const parsedIdleTimeout = Number(import.meta.env.VITE_IDLE_TIMEOUT_MS)
+const IDLE_TIMEOUT_MS =
+  Number.isFinite(parsedIdleTimeout) && parsedIdleTimeout >= 60_000
+    ? parsedIdleTimeout
+    : DEFAULT_IDLE_TIMEOUT_MS
 
 function clearSession() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('user')
+  sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(USER_KEY)
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+}
+
+function readStoredSession() {
+  const sessionToken = sessionStorage.getItem(TOKEN_KEY)
+  const sessionUser = sessionStorage.getItem(USER_KEY)
+  if (sessionToken && sessionUser) {
+    return { token: sessionToken, user: sessionUser }
+  }
+
+  // Legacy fallback for old saved sessions; migrate to session storage.
+  const legacyToken = localStorage.getItem(TOKEN_KEY)
+  const legacyUser = localStorage.getItem(USER_KEY)
+  if (legacyToken && legacyUser) {
+    sessionStorage.setItem(TOKEN_KEY, legacyToken)
+    sessionStorage.setItem(USER_KEY, legacyUser)
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
+    return { token: legacyToken, user: legacyUser }
+  }
+
+  return null
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -33,21 +64,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true
 
     async function restoreSession() {
-      const savedToken = localStorage.getItem('token')
-      const savedUser = localStorage.getItem('user')
-
-      if (!savedToken || !savedUser) {
+      const savedSession = readStoredSession()
+      if (!savedSession) {
         if (mounted) setIsLoading(false)
         return
       }
 
-      setToken(savedToken)
+      setToken(savedSession.token)
 
       try {
         const res = await api.get('/auth/me')
         if (!mounted) return
 
-        localStorage.setItem('user', JSON.stringify(res.data.user))
+        sessionStorage.setItem(USER_KEY, JSON.stringify(res.data.user))
         setUser(res.data.user)
       } catch {
         if (!mounted) return
@@ -70,8 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.post('/auth/login', { email, password })
     const { token: nextToken, user: nextUser } = res.data
 
-    localStorage.setItem('token', nextToken)
-    localStorage.setItem('user', JSON.stringify(nextUser))
+    sessionStorage.setItem(TOKEN_KEY, nextToken)
+    sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
     setToken(nextToken)
     setUser(nextUser)
   }
@@ -81,6 +112,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null)
     setUser(null)
   }
+
+  useEffect(() => {
+    if (!token) return
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    const activityEvents: Array<keyof WindowEventMap> = [
+      'pointerdown',
+      'keydown',
+      'touchstart',
+      'scroll',
+    ]
+
+    const handleIdleTimeout = () => {
+      clearSession()
+      setToken(null)
+      setUser(null)
+    }
+
+    const scheduleTimeout = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      timeoutId = setTimeout(handleIdleTimeout, IDLE_TIMEOUT_MS)
+    }
+
+    const handleActivity = () => {
+      if (document.visibilityState === 'hidden') return
+      scheduleTimeout()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        scheduleTimeout()
+      }
+    }
+
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, handleActivity)
+    })
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    scheduleTimeout()
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      activityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, handleActivity)
+      })
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [token])
 
   return (
     <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>

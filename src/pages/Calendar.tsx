@@ -27,6 +27,21 @@ interface CalendarMeta {
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
 const toInput = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 
+function asDateTimeInput(element: EventTarget & HTMLInputElement) {
+  if (element.type !== 'datetime-local') {
+    element.type = 'datetime-local'
+  }
+  if (typeof element.showPicker === 'function') {
+    element.showPicker()
+  }
+}
+
+function asTextInputWhenEmpty(element: EventTarget & HTMLInputElement) {
+  if (!element.value) {
+    element.type = 'text'
+  }
+}
+
 function getCopy(locale: 'ar' | 'en') {
   return locale === 'ar'
     ? {
@@ -120,7 +135,11 @@ export default function Calendar() {
   const { user } = useAuth()
   const { locale } = useLocale()
   const copy = getCopy(locale)
+  const noEventsTitle = locale === 'ar' ? 'لا توجد أحداث في هذا النطاق' : 'No events in this range'
+  const noEventsMessage = locale === 'ar' ? 'قم بإنشاء حدث جديد أو غيّر الفلاتر/الفترة الزمنية.' : 'Create a new event or adjust filters/date range.'
+  const requireTeacherClass = locale === 'ar' ? 'يجب اختيار المعلم والصف عند إنشاء حصة.' : 'Teacher and class are required for class sessions.'
   const isAdmin = user?.role === 'ADMIN'
+  const isStudent = user?.role === 'STUDENT'
   const [meta, setMeta] = useState<CalendarMeta>({ students: [], teachers: [], classes: [] })
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -128,6 +147,7 @@ export default function Calendar() {
   const [anchor, setAnchor] = useState(() => new Date())
   const [filters, setFilters] = useState({ teacherId: '', studentId: '', classId: '', type: '' })
   const [form, setForm] = useState({ title: '', description: '', type: 'CLASS' as EventType, startAt: toInput(new Date()), endAt: '', relatedStudentId: '', relatedTeacherId: '', relatedClassId: '' })
+  const dateTimePlaceholder = locale === 'ar' ? 'اختر التاريخ والوقت' : 'Choose date and time'
 
   const days = useMemo(() => getDays(view, anchor), [view, anchor])
   const dateLocale = locale === 'ar' ? 'ar' : 'en-GB'
@@ -166,6 +186,10 @@ export default function Calendar() {
 
   async function createEvent() {
     if (!form.title || !form.startAt) return
+    if (form.type === 'CLASS' && (!form.relatedTeacherId || !form.relatedClassId)) {
+      toast.error(requireTeacherClass)
+      return
+    }
     try {
       await api.post('/calendar', {
         ...form,
@@ -226,19 +250,23 @@ export default function Calendar() {
         </div>
       </section>
 
-      <section className="card p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-        <select className="input" value={filters.teacherId} onChange={e => setFilters({ ...filters, teacherId: e.target.value })}>
-          <option value="">{copy.allTeachers}</option>
-          {meta.teachers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
+      <section className={`card p-4 grid gap-3 ${isStudent ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
+        {!isStudent && (
+          <select className="input" value={filters.teacherId} onChange={e => setFilters({ ...filters, teacherId: e.target.value })}>
+            <option value="">{copy.allTeachers}</option>
+            {meta.teachers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        )}
         <select className="input" value={filters.classId} onChange={e => setFilters({ ...filters, classId: e.target.value })}>
           <option value="">{copy.allClasses}</option>
           {meta.classes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
-        <select className="input" value={filters.studentId} onChange={e => setFilters({ ...filters, studentId: e.target.value })}>
-          <option value="">{copy.allStudents}</option>
-          {meta.students.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
+        {!isStudent && (
+          <select className="input" value={filters.studentId} onChange={e => setFilters({ ...filters, studentId: e.target.value })}>
+            <option value="">{copy.allStudents}</option>
+            {meta.students.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        )}
         <select className="input" value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value })}>
           <option value="">{copy.allTypes}</option>
           {Object.entries(copy.labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -251,8 +279,28 @@ export default function Calendar() {
           <select className="input" value={form.type} onChange={e => setForm({ ...form, type: e.target.value as EventType })}>
             {Object.entries(copy.labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
-          <input className="input" type="datetime-local" value={form.startAt} onChange={e => setForm({ ...form, startAt: e.target.value })} />
-          <input className="input" type="datetime-local" value={form.endAt} onChange={e => setForm({ ...form, endAt: e.target.value })} />
+          <input
+            className="input"
+            type={form.startAt ? 'datetime-local' : 'text'}
+            lang="en-GB"
+            placeholder={dateTimePlaceholder}
+            title={dateTimePlaceholder}
+            value={form.startAt}
+            onFocus={e => asDateTimeInput(e.currentTarget)}
+            onBlur={e => asTextInputWhenEmpty(e.currentTarget)}
+            onChange={e => setForm({ ...form, startAt: e.target.value })}
+          />
+          <input
+            className="input"
+            type={form.endAt ? 'datetime-local' : 'text'}
+            lang="en-GB"
+            placeholder={dateTimePlaceholder}
+            title={dateTimePlaceholder}
+            value={form.endAt}
+            onFocus={e => asDateTimeInput(e.currentTarget)}
+            onBlur={e => asTextInputWhenEmpty(e.currentTarget)}
+            onChange={e => setForm({ ...form, endAt: e.target.value })}
+          />
           <input className="input md:col-span-2" placeholder={copy.description} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
           <select className="input" value={form.relatedTeacherId} onChange={e => setForm({ ...form, relatedTeacherId: e.target.value })}>
             <option value="">{copy.noTeacher}</option>
@@ -266,7 +314,13 @@ export default function Calendar() {
             <option value="">{copy.noStudent}</option>
             {meta.students.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
-          <button onClick={createEvent} className="btn-primary px-4 py-2 text-[13px]">{copy.createEvent}</button>
+          <button
+            onClick={createEvent}
+            className="btn-primary px-4 py-2 text-[13px]"
+            disabled={form.type === 'CLASS' && (!form.relatedTeacherId || !form.relatedClassId)}
+          >
+            {copy.createEvent}
+          </button>
         </section>
       )}
 
@@ -274,6 +328,8 @@ export default function Calendar() {
         <div className="card p-8 text-[13px]" style={{ color: 'var(--text-muted)' }}>{copy.loading}</div>
       ) : days.length === 0 ? (
         <div className="card"><EmptyState title={copy.noDays} message={copy.noDaysMessage} /></div>
+      ) : events.length === 0 ? (
+        <div className="card"><EmptyState title={noEventsTitle} message={noEventsMessage} /></div>
       ) : (
         <section className={`grid gap-3 ${view === 'week' ? 'grid-cols-1 lg:grid-cols-7' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'}`}>
           {days.map(day => {

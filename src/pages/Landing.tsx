@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useLocale } from '../hooks/useLocale'
+import api from '../api/api'
+import studentsManagementImage from '../assets/landing/students-management.jfif'
+import teachersManagementImage from '../assets/landing/teachers-management.jfif'
 
 // ─── Translations ─────────────────────────────────────────────────────────────
 const T = {
@@ -9,24 +13,24 @@ const T = {
     hero1: 'أدر مدرستك بذكاء',
     heroDesc: 'منصة شاملة تجمع إدارة الطلاب، المعلمين، الحضور، والمدفوعات — مع تحليل ذكي وتقارير آلية.',
     startFree: 'ابدأ مجاناً الآن', login: 'تسجيل الدخول', register: 'ابدأ مجاناً',
-    watchDemo: 'مشاهدة العرض', scrollDown: 'تمرير للأسفل',
-    trustText: 'ثقة', trustCount: '200+', trustSuffix: 'مؤسسة تعليمية',
+    watchDemo: 'تسجيل الدخول', scrollDown: 'تمرير للأسفل',
+    trustText: 'حالة المنتج', trustCount: 'v1', trustSuffix: 'نسخة جديدة قيد الإطلاق',
     navFeatures: 'المميزات', navHow: 'كيف يعمل', navReviews: 'الآراء',
     featuresLabel: 'المميزات', featuresTitle: 'كل ما تحتاجه في مكان واحد',
     featuresDesc: 'منصة صُممت لتبسيط كل جانب من إدارة مؤسستك التعليمية',
     howLabel: 'كيف يعمل', howTitle: 'ثلاث خطوات للبدء',
-    reviewsLabel: 'آراء المستخدمين', reviewsTitle: 'ماذا يقول مستخدمونا؟',
+    reviewsLabel: 'جاهزية المنتج', reviewsTitle: 'منصة جديدة بمسار واضح',
     ctaTitle: 'جاهز لتحويل مؤسستك؟',
-    ctaDesc: 'انضم إلى أكثر من 200 مؤسسة وابدأ رحلة الإدارة الذكية اليوم — مجاناً.',
+    ctaDesc: 'ابدأ الآن بنسختك الأولى ثم طوّرها خطوة بخطوة حسب احتياج مؤسستك.',
     createFree: 'إنشاء حساب مجاني',
     privacy: 'الخصوصية', terms: 'الشروط', support: 'الدعم',
     footer: '© 2025 EduSystem — جميع الحقوق محفوظة',
     typewords: ['بلا تعقيد', 'بكفاءة عالية', 'بأقل وقت', 'بتقارير آلية'],
     stats: [
-      { value: 1200, suffix: '+', label: 'طالب مُسجَّل', sub: 'في مؤسسات متعددة' },
-      { value: 98, suffix: '%', label: 'دقة تتبع الحضور', sub: 'مقارنة بالأنظمة التقليدية' },
-      { value: 200, suffix: '+', label: 'مؤسسة تعليمية', sub: 'تستخدم النظام يومياً' },
-      { value: 40, suffix: '%', label: 'توفير في الوقت', sub: 'للمهام الإدارية' },
+      { value: 1, suffix: '', label: 'منصة واحدة', sub: 'لكامل العمليات التعليمية' },
+      { value: 2, suffix: '', label: 'دعم لغتين', sub: 'عربي / إنجليزي مع RTL و LTR' },
+      { value: 3, suffix: '', label: 'أدوار أساسية', sub: 'مدير، معلم، طالب' },
+      { value: 4, suffix: '', label: 'وحدات تشغيل', sub: 'طلاب، حضور، واجبات، مدفوعات' },
     ],
     features: [
       { title: 'إدارة الطلاب', desc: 'سجلات أكاديمية كاملة، نتائج، وتتبع شامل لكل طالب.', accent: '124,58,237' },
@@ -42,9 +46,9 @@ const T = {
       { num: '03', title: 'ابدأ الإدارة الذكية', desc: 'حضور، مدفوعات، تقارير — في لوحة تحكم واحدة.', icon: '🚀' },
     ],
     reviews: [
-      { name: 'أ. محمد الزهراني', role: 'مدير المدرسة', school: 'أكاديمية النخبة', text: 'وفّر علينا النظام ساعات من العمل اليدوي. تقارير الحضور والمدفوعات أصبحت تلقائية بالكامل.' },
-      { name: 'أ. فاطمة العمري', role: 'مشرفة أكاديمية', school: 'مدرسة الإبداع', text: 'المساعد الذكي ساعدنا في تحديد الطلاب المحتاجين للدعم مبكراً.' },
-      { name: 'أ. عمر الشمري', role: 'مسؤول مالي', school: 'معهد التميز', text: 'تتبع المدفوعات وإرسال الإشعارات أصبح آلياً — لا تأخير ولا أخطاء.' },
+      { name: 'إطلاق عملي', role: 'النسخة الحالية', school: 'جاهزة للاستخدام', text: 'التركيز الآن على الأساسيات المهمة: إدارة الطلاب، الحضور، الواجبات، والمدفوعات بشكل واضح.' },
+      { name: 'قابلة للتوسعة', role: 'النسخة الحالية', school: 'مرنة للتطوير', text: 'يمكن إضافة الصلاحيات المتقدمة والتقارير الذكية تدريجياً بدون إعادة بناء النظام.' },
+      { name: 'خصوصية أفضل', role: 'النسخة الحالية', school: 'فصل صلاحيات المستخدمين', text: 'المنصة تعرض لكل مستخدم بياناته حسب الدور، مع إمكانية تشديد الحماية أكثر مع التوسع.' },
     ],
   },
   en: {
@@ -53,24 +57,24 @@ const T = {
     hero1: 'Manage your school smartly',
     heroDesc: 'An all-in-one platform for students, teachers, attendance, and payments — with AI analytics and automated reports.',
     startFree: 'Start Free Now', login: 'Sign In', register: 'Get Started',
-    watchDemo: 'Watch Demo', scrollDown: 'Scroll Down',
-    trustText: 'Trusted by', trustCount: '200+', trustSuffix: 'institutions',
+    watchDemo: 'Sign In', scrollDown: 'Scroll Down',
+    trustText: 'Product Status', trustCount: 'v1', trustSuffix: 'Early launch build',
     navFeatures: 'Features', navHow: 'How It Works', navReviews: 'Reviews',
     featuresLabel: 'FEATURES', featuresTitle: 'Everything you need in one place',
     featuresDesc: 'A complete platform designed to simplify every aspect of managing your institution',
     howLabel: 'HOW IT WORKS', howTitle: 'Three steps to get started',
-    reviewsLabel: 'TESTIMONIALS', reviewsTitle: 'What our users say',
+    reviewsLabel: 'PRODUCT READINESS', reviewsTitle: 'A new platform with a clear path',
     ctaTitle: 'Ready to transform your institution?',
-    ctaDesc: 'Join over 200 educational institutions and start your smart management journey — for free.',
+    ctaDesc: 'Start with your first live version, then expand module by module based on your school needs.',
     createFree: 'Create Free Account',
     privacy: 'Privacy', terms: 'Terms', support: 'Support',
     footer: '© 2025 EduSystem — All rights reserved',
     typewords: ['without complexity', 'with high efficiency', 'saving time', 'with auto reports'],
     stats: [
-      { value: 1200, suffix: '+', label: 'Enrolled Students', sub: 'across multiple institutions' },
-      { value: 98, suffix: '%', label: 'Attendance Accuracy', sub: 'vs traditional systems' },
-      { value: 200, suffix: '+', label: 'Institutions', sub: 'using the system daily' },
-      { value: 40, suffix: '%', label: 'Time Saved', sub: 'on admin tasks' },
+      { value: 1, suffix: '', label: 'One Platform', sub: 'for daily school operations' },
+      { value: 2, suffix: '', label: 'Languages', sub: 'Arabic / English with RTL/LTR' },
+      { value: 3, suffix: '', label: 'Core Roles', sub: 'Admin, Teacher, Student' },
+      { value: 4, suffix: '', label: 'Operational Modules', sub: 'Students, Attendance, Assignments, Payments' },
     ],
     features: [
       { title: 'Student Management', desc: 'Complete academic records and full tracking from enrollment to graduation.', accent: '124,58,237' },
@@ -86,9 +90,9 @@ const T = {
       { num: '03', title: 'Start smart management', desc: 'Attendance, payments, reports — everything in one dashboard.', icon: '🚀' },
     ],
     reviews: [
-      { name: 'Mohammed Al-Zahrani', role: 'School Principal', school: 'Elite Academy', text: 'The system saved us hours of manual work daily. Reports are now fully automated.' },
-      { name: 'Fatima Al-Omari', role: 'Academic Supervisor', school: 'Innovation School', text: 'The AI assistant helped identify students needing support before problems escalated.' },
-      { name: 'Omar Al-Shamri', role: 'Finance Manager', school: 'Excellence Institute', text: 'Payment tracking became fully automated — no delays, no errors.' },
+      { name: 'Practical Launch', role: 'Current version', school: 'Ready to use', text: 'The platform focuses on core workflows first: students, attendance, assignments, and payments.' },
+      { name: 'Built to Expand', role: 'Current version', school: 'Flexible roadmap', text: 'You can add deeper permissions, advanced analytics, and automation incrementally.' },
+      { name: 'Stronger Privacy', role: 'Current version', school: 'Role-based access', text: 'Each user sees data relevant to their role, with room for stricter controls as you scale.' },
     ],
   },
 }
@@ -214,36 +218,41 @@ function DashboardPreview() {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const FEATURE_IMAGES = [
-  'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=500&q=75',
-  'https://images.unsplash.com/photo-1577896851905-27e69c5e2c2e?w=500&q=75',
+  studentsManagementImage,
+  teachersManagementImage,
   'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=500&q=75',
-  null, null, null,
-]
-const REVIEW_AVATARS = [
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&q=75',
-  'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=80&q=75',
-  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&q=75',
+  'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=900&q=75',
+  'https://images.unsplash.com/photo-1552664730-d307ca884978?w=900&q=75',
+  'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=900&q=75',
 ]
 const REVIEW_ACCENTS = ['#7c3aed','#059669','#0284c7']
-const STAT_ICONS = ['👨‍🎓','✅','🏫','⚡']
 const STAT_COLORS = ['#7c3aed','#059669','#0284c7','#d97706']
-const TRUST_AVATARS = [
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=60&q=75',
-  'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=60&q=75',
-  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=60&q=75',
-  'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=60&q=75',
-]
 
 function scrollTo(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior:'smooth', block:'start' })
 }
 
+function StatIcon({ index }: { index: number }) {
+  const icons = [
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01"/></svg>,
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>,
+  ]
+  return icons[index] ?? icons[0]
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function Landing() {
   const navigate = useNavigate()
-  const [lang, setLang] = useState<Lang>('ar')
+  const { locale, toggleLocale } = useLocale()
   const [mounted, setMounted] = useState(false)
   const [scrollY, setScrollY] = useState(0)
+  const [canRegister, setCanRegister] = useState(false)
+  const [viewportWidth, setViewportWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1280,
+  )
+  const lang = locale as Lang
   const t = T[lang]
 
   const heroRef   = useInView(0.1)
@@ -255,27 +264,60 @@ export default function Landing() {
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 60)
     const onScroll = () => setScrollY(window.scrollY)
+    const onResize = () => setViewportWidth(window.innerWidth)
     window.addEventListener('scroll', onScroll)
-    return () => { clearTimeout(timer); window.removeEventListener('scroll', onScroll) }
+    window.addEventListener('resize', onResize)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [])
+
+  useEffect(() => {
+    let mountedComponent = true
+
+    async function loadRegistrationStatus() {
+      try {
+        const res = await api.get('/auth/registration-status')
+        if (!mountedComponent) return
+        setCanRegister(Boolean(res.data?.registrationEnabled))
+      } catch {
+        if (!mountedComponent) return
+        setCanRegister(false)
+      }
+    }
+
+    void loadRegistrationStatus()
+    return () => {
+      mountedComponent = false
+    }
   }, [])
 
   const btnBase: React.CSSProperties = { fontFamily:'inherit', cursor:'pointer', border:'none', transition:'all .2s' }
   const isAr = lang === 'ar'
+  const isPhone = viewportWidth < 640
+  const isCompact = viewportWidth < 980
+  const sectionPaddingX = isPhone ? 16 : isCompact ? 24 : 40
+  const navHeight = isPhone ? 56 : 62
+  const statsColumns = isPhone ? '1fr' : isCompact ? 'repeat(2,1fr)' : 'repeat(4,1fr)'
+  const cardColumns = isPhone ? '1fr' : isCompact ? 'repeat(2,1fr)' : 'repeat(3,1fr)'
+  const footerLinksWrap = isPhone ? 'wrap' : 'nowrap'
 
   return (
     <div style={{ minHeight:'100vh', background:'#080612', color:'white', fontFamily:"'Cairo','Tajawal','Segoe UI',sans-serif", overflowX:'hidden', direction:t.dir }}>
 
       {/* ── NAVBAR ── */}
-      <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 40px', height:62, background:scrollY>40?'rgba(8,6,18,0.92)':'transparent', backdropFilter:scrollY>40?'blur(20px)':'none', borderBottom:scrollY>40?'1px solid rgba(124,58,237,0.12)':'none', transition:'all .4s ease' }}>
+      <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'space-between', padding:`0 ${sectionPaddingX}px`, height:navHeight, background:scrollY>40?'rgba(8,6,18,0.92)':'transparent', backdropFilter:scrollY>40?'blur(20px)':'none', borderBottom:scrollY>40?'1px solid rgba(124,58,237,0.12)':'none', transition:'all .4s ease' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <div style={{ width:36, height:36, borderRadius:10, background:'linear-gradient(135deg,#7c3aed,#4338ca)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 0 20px rgba(124,58,237,0.45)' }}>
+          <div style={{ width:isPhone?32:36, height:isPhone?32:36, borderRadius:isPhone?9:10, background:'linear-gradient(135deg,#7c3aed,#4338ca)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 0 20px rgba(124,58,237,0.45)' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
           </div>
-          <span style={{ fontWeight:800, fontSize:16, color:'#ede9ff' }}>EduSystem</span>
+          <span style={{ fontWeight:800, fontSize:isPhone?14:16, color:'#ede9ff' }}>EduSystem</span>
         </div>
 
         {/* Nav links — scroll to sections */}
-        <div style={{ display:'flex', alignItems:'center', gap:28 }}>
+        <div style={{ display:isCompact?'none':'flex', alignItems:'center', gap:28 }}>
           {([['features', t.navFeatures],['how', t.navHow],['reviews', t.navReviews]] as const).map(([id, label]) => (
             <button key={id} onClick={() => scrollTo(id)}
               style={{ ...btnBase, background:'none', fontSize:13, color:'rgba(255,255,255,0.5)', fontWeight:500, padding:0 }}
@@ -285,30 +327,32 @@ export default function Landing() {
           ))}
         </div>
 
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+        <div style={{ display:'flex', gap:isPhone?6:8, alignItems:'center' }}>
           {/* Language toggle */}
-          <button onClick={() => setLang(l => l==='ar'?'en':'ar')}
-            style={{ ...btnBase, padding:'7px 14px', borderRadius:8, fontSize:12, fontWeight:700, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', color:'rgba(255,255,255,0.6)', letterSpacing:'0.06em' }}
+          <button onClick={toggleLocale}
+            style={{ ...btnBase, padding:isPhone?'7px 11px':'7px 14px', borderRadius:8, fontSize:12, fontWeight:700, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', color:'rgba(255,255,255,0.6)', letterSpacing:'0.06em' }}
             onMouseEnter={e => { e.currentTarget.style.background='rgba(124,58,237,0.15)'; e.currentTarget.style.color='#c4b5fd'; e.currentTarget.style.borderColor='rgba(124,58,237,0.4)' }}
             onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.color='rgba(255,255,255,0.6)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.12)' }}
           >{isAr ? 'EN' : 'AR'}</button>
 
           <button onClick={() => navigate('/login')}
-            style={{ ...btnBase, padding:'8px 20px', borderRadius:9, fontSize:13, fontWeight:600, background:'transparent', border:'1px solid rgba(124,58,237,0.4)', color:'#c4b5fd' }}
+            style={{ ...btnBase, padding:isPhone?'8px 14px':'8px 20px', borderRadius:9, fontSize:13, fontWeight:600, background:'transparent', border:'1px solid rgba(124,58,237,0.4)', color:'#c4b5fd' }}
             onMouseEnter={e => { e.currentTarget.style.background='rgba(124,58,237,0.12)'; e.currentTarget.style.borderColor='rgba(124,58,237,0.65)' }}
             onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.borderColor='rgba(124,58,237,0.4)' }}
           >{t.login}</button>
 
-          <button onClick={() => navigate('/register')}
-            style={{ ...btnBase, padding:'8px 20px', borderRadius:9, fontSize:13, fontWeight:700, background:'linear-gradient(135deg,#7c3aed,#4338ca)', color:'white', boxShadow:'0 0 24px rgba(124,58,237,0.38)' }}
-            onMouseEnter={e => { e.currentTarget.style.transform='scale(1.04)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}
-          >{t.register}</button>
+          {canRegister && !isPhone && (
+            <button onClick={() => navigate('/register')}
+              style={{ ...btnBase, padding:'8px 20px', borderRadius:9, fontSize:13, fontWeight:700, background:'linear-gradient(135deg,#7c3aed,#4338ca)', color:'white', boxShadow:'0 0 24px rgba(124,58,237,0.38)' }}
+              onMouseEnter={e => { e.currentTarget.style.transform='scale(1.04)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}
+            >{t.register}</button>
+          )}
         </div>
       </nav>
 
       {/* ── HERO ── */}
-      <section style={{ position:'relative', minHeight:'100vh', display:'flex', alignItems:'center', overflow:'hidden', paddingTop:62 }}>
+      <section style={{ position:'relative', minHeight:isCompact?'auto':'100vh', display:'flex', alignItems:'center', overflow:'hidden', paddingTop:navHeight }}>
         <div style={{ position:'absolute', inset:0, backgroundImage:`radial-gradient(ellipse 80% 60% at 20% 40%, rgba(124,58,237,0.12) 0%, transparent 60%), radial-gradient(ellipse 60% 50% at 80% 70%, rgba(67,56,202,0.1) 0%, transparent 55%), linear-gradient(rgba(124,58,237,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.03) 1px, transparent 1px)`, backgroundSize:'auto,auto,64px 64px,64px 64px', pointerEvents:'none' }} />
         <div style={{ position:'absolute', inset:0, overflow:'hidden', pointerEvents:'none' }}>
           {Array.from({length:18},(_,i)=>i).map(i => {
@@ -322,61 +366,63 @@ export default function Landing() {
           })}
         </div>
 
-        <div style={{ width:'100%', maxWidth:1240, margin:'0 auto', padding:'80px 40px', display:'grid', gridTemplateColumns:'1fr 1.1fr', alignItems:'center', gap:64 }}>
+        <div style={{ width:'100%', maxWidth:1240, margin:'0 auto', padding:`${isPhone ? 48 : 72}px ${sectionPaddingX}px ${isPhone ? 46 : 72}px`, display:'grid', gridTemplateColumns:isCompact?'1fr':'1fr 1.1fr', alignItems:'center', gap:isCompact?28:64 }}>
           <div ref={heroRef.ref} style={{ opacity:mounted&&heroRef.inView?1:0, transform:mounted&&heroRef.inView?'translateY(0)':'translateY(40px)', transition:'all 0.85s cubic-bezier(.16,1,.3,1)' }}>
             <div style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'5px 14px', borderRadius:99, background:'rgba(124,58,237,0.1)', border:'1px solid rgba(124,58,237,0.28)', fontSize:12, color:'#a78bfa', fontWeight:600, marginBottom:26 }}>
               <span style={{ width:7, height:7, borderRadius:'50%', background:'#7c3aed', boxShadow:'0 0 8px #7c3aed', animation:'pulse 2s infinite' }} />
               {t.badge}
             </div>
             <h1 style={{ fontSize:'clamp(2rem,4vw,3.2rem)', fontWeight:800, lineHeight:1.2, marginBottom:12, color:'#ede9ff', letterSpacing:'-0.025em' }}>{t.hero1}</h1>
-            <h1 style={{ fontSize:'clamp(2rem,4vw,3.2rem)', fontWeight:800, lineHeight:1.2, marginBottom:24, letterSpacing:'-0.025em', minHeight:'1.2em' }}>
+            <h1 style={{ fontSize:'clamp(2rem,4vw,3.2rem)', fontWeight:800, lineHeight:1.2, marginBottom:isPhone?16:24, letterSpacing:'-0.025em', minHeight:'1.2em' }}>
               <Typewriter words={t.typewords} />
             </h1>
-            <p style={{ fontSize:15.5, color:'rgba(255,255,255,0.42)', lineHeight:1.85, maxWidth:460, marginBottom:38 }}>{t.heroDesc}</p>
-            <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom:40 }}>
-              <button onClick={() => navigate('/register')}
-                style={{ ...btnBase, padding:'13px 32px', borderRadius:12, fontSize:15, fontWeight:700, background:'linear-gradient(135deg,#7c3aed,#4338ca)', color:'white', boxShadow:'0 8px 32px rgba(124,58,237,0.42)', display:'flex', alignItems:'center', gap:8 }}
-                onMouseEnter={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 14px 40px rgba(124,58,237,0.58)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='0 8px 32px rgba(124,58,237,0.42)' }}
-              >
-                {t.startFree}
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform:isAr?'rotate(180deg)':'none' }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-              </button>
+            <p style={{ fontSize:15.5, color:'rgba(255,255,255,0.42)', lineHeight:1.85, maxWidth:460, marginBottom:isPhone?26:38 }}>{t.heroDesc}</p>
+            <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom:isPhone?28:40 }}>
+              {canRegister && (
+                <button onClick={() => navigate('/register')}
+                  style={{ ...btnBase, padding:'13px 32px', borderRadius:12, fontSize:15, fontWeight:700, background:'linear-gradient(135deg,#7c3aed,#4338ca)', color:'white', boxShadow:'0 8px 32px rgba(124,58,237,0.42)', display:'flex', alignItems:'center', gap:8 }}
+                  onMouseEnter={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 14px 40px rgba(124,58,237,0.58)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='0 8px 32px rgba(124,58,237,0.42)' }}
+                >
+                  {t.startFree}
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform:isAr?'rotate(180deg)':'none' }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+              )}
               <button onClick={() => navigate('/login')}
                 style={{ ...btnBase, padding:'13px 28px', borderRadius:12, fontSize:15, fontWeight:600, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.65)' }}
                 onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.08)'; e.currentTarget.style.color='rgba(255,255,255,0.9)' }}
                 onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.04)'; e.currentTarget.style.color='rgba(255,255,255,0.65)' }}
               >{t.watchDemo}</button>
             </div>
-            <div style={{ display:'flex', alignItems:'center', gap:14, paddingTop:28, borderTop:'1px solid rgba(255,255,255,0.07)' }}>
-              <div style={{ display:'flex' }}>
-                {TRUST_AVATARS.map((src,i) => <img key={i} src={src} alt="" style={{ width:30, height:30, borderRadius:'50%', objectFit:'cover', border:'2px solid #080612', marginLeft:i>0?-8:0 }} />)}
-              </div>
-              <div>
-                <div style={{ display:'flex', gap:2, marginBottom:3 }}>
-                  {[...Array(5)].map((_,i) => <svg key={i} width="11" height="11" viewBox="0 0 24 24" fill="#fbbf24"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>)}
-                </div>
-                <p style={{ fontSize:12, color:'rgba(255,255,255,0.35)', margin:0 }}>{t.trustText} <strong style={{ color:'rgba(255,255,255,0.6)' }}>{t.trustCount}</strong> {t.trustSuffix}</p>
-              </div>
+            <div style={{ display:'flex', alignItems:'center', gap:10, paddingTop:28, borderTop:'1px solid rgba(255,255,255,0.07)', flexWrap:'wrap' }}>
+              <span style={{ fontSize:11, color:'rgba(255,255,255,0.45)' }}>{t.trustText}</span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#a78bfa', padding:'4px 10px', borderRadius:999, background:'rgba(124,58,237,0.16)', border:'1px solid rgba(124,58,237,0.35)' }}>
+                {t.trustCount}
+              </span>
+              <span style={{ fontSize:12, color:'rgba(255,255,255,0.55)' }}>{t.trustSuffix}</span>
             </div>
           </div>
-          <DashboardPreview />
+          {!isCompact && <DashboardPreview />}
         </div>
 
-        <div style={{ position:'absolute', bottom:32, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:6, animation:'floatY 2.5s ease-in-out infinite', opacity:scrollY>100?0:0.5, transition:'opacity .4s' }}>
-          <span style={{ fontSize:10, color:'rgba(255,255,255,0.3)', letterSpacing:'0.1em' }}>{t.scrollDown}</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
+        {!isCompact && (
+          <div style={{ position:'absolute', bottom:32, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:6, animation:'floatY 2.5s ease-in-out infinite', opacity:scrollY>100?0:0.5, transition:'opacity .4s' }}>
+            <span style={{ fontSize:10, color:'rgba(255,255,255,0.3)', letterSpacing:'0.1em' }}>{t.scrollDown}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        )}
       </section>
 
       {/* ── STATS ── */}
-      <section style={{ padding:'0 40px 80px', maxWidth:1240, margin:'0 auto' }}>
-        <div ref={statsRef.ref} style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, opacity:statsRef.inView?1:0, transform:statsRef.inView?'translateY(0)':'translateY(30px)', transition:'all 0.75s cubic-bezier(.16,1,.3,1)' }}>
+      <section style={{ padding:`0 ${sectionPaddingX}px ${isPhone ? 56 : 80}px`, maxWidth:1240, margin:'0 auto' }}>
+        <div ref={statsRef.ref} style={{ display:'grid', gridTemplateColumns:statsColumns, gap:16, opacity:statsRef.inView?1:0, transform:statsRef.inView?'translateY(0)':'translateY(30px)', transition:'all 0.75s cubic-bezier(.16,1,.3,1)' }}>
           {t.stats.map((s,i) => (
             <div key={i} style={{ background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:18, padding:'22px 20px', transition:'all .3s' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor=`${STAT_COLORS[i]}33`; e.currentTarget.style.background=`${STAT_COLORS[i]}12` }}
               onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.06)'; e.currentTarget.style.background='rgba(255,255,255,0.025)' }}>
-              <div style={{ fontSize:26, marginBottom:10 }}>{STAT_ICONS[i]}</div>
+              <div style={{ width:48, height:48, marginBottom:14, borderRadius:14, display:'flex', alignItems:'center', justifyContent:'center', background:`${STAT_COLORS[i]}16`, border:`1px solid ${STAT_COLORS[i]}33`, color:STAT_COLORS[i] }}>
+                <StatIcon index={i} />
+              </div>
               <div style={{ fontSize:30, fontWeight:800, color:STAT_COLORS[i], lineHeight:1, marginBottom:5 }}><Counter target={s.value} suffix={s.suffix} /></div>
               <div style={{ fontSize:13, fontWeight:600, color:'rgba(255,255,255,0.65)', marginBottom:3 }}>{s.label}</div>
               <div style={{ fontSize:11, color:'rgba(255,255,255,0.28)' }}>{s.sub}</div>
@@ -386,13 +432,13 @@ export default function Landing() {
       </section>
 
       {/* ── FEATURES ── */}
-      <section id="features" ref={featRef.ref} style={{ padding:'80px 40px', maxWidth:1240, margin:'0 auto', opacity:featRef.inView?1:0, transform:featRef.inView?'translateY(0)':'translateY(40px)', transition:'all 0.85s cubic-bezier(.16,1,.3,1)' }}>
-        <div style={{ textAlign:'center', marginBottom:60 }}>
+      <section id="features" ref={featRef.ref} style={{ padding:`${isPhone ? 56 : 80}px ${sectionPaddingX}px`, maxWidth:1240, margin:'0 auto', opacity:featRef.inView?1:0, transform:featRef.inView?'translateY(0)':'translateY(40px)', transition:'all 0.85s cubic-bezier(.16,1,.3,1)' }}>
+        <div style={{ textAlign:'center', marginBottom:isPhone?38:60 }}>
           <p style={{ fontSize:11, fontWeight:700, letterSpacing:'0.14em', color:'#7c3aed', marginBottom:12 }}>{t.featuresLabel}</p>
           <h2 style={{ fontSize:'clamp(1.8rem,3.5vw,2.5rem)', fontWeight:800, color:'#ede9ff', margin:'0 0 14px', letterSpacing:'-0.02em' }}>{t.featuresTitle}</h2>
           <p style={{ fontSize:15, color:'rgba(255,255,255,0.38)', lineHeight:1.75, maxWidth:520, margin:'0 auto' }}>{t.featuresDesc}</p>
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:18 }}>
+        <div style={{ display:'grid', gridTemplateColumns:cardColumns, gap:18 }}>
           {t.features.map((f,i) => {
             const img = FEATURE_IMAGES[i]
             return (
@@ -421,13 +467,13 @@ export default function Landing() {
       </section>
 
       {/* ── HOW IT WORKS ── */}
-      <section id="how" ref={howRef.ref} style={{ padding:'80px 40px', maxWidth:1240, margin:'0 auto', opacity:howRef.inView?1:0, transform:howRef.inView?'translateY(0)':'translateY(40px)', transition:'all 0.85s cubic-bezier(.16,1,.3,1)' }}>
-        <div style={{ textAlign:'center', marginBottom:60 }}>
+      <section id="how" ref={howRef.ref} style={{ padding:`${isPhone ? 56 : 80}px ${sectionPaddingX}px`, maxWidth:1240, margin:'0 auto', opacity:howRef.inView?1:0, transform:howRef.inView?'translateY(0)':'translateY(40px)', transition:'all 0.85s cubic-bezier(.16,1,.3,1)' }}>
+        <div style={{ textAlign:'center', marginBottom:isPhone?38:60 }}>
           <p style={{ fontSize:11, fontWeight:700, letterSpacing:'0.14em', color:'#7c3aed', marginBottom:12 }}>{t.howLabel}</p>
           <h2 style={{ fontSize:'clamp(1.8rem,3.5vw,2.5rem)', fontWeight:800, color:'#ede9ff', margin:0, letterSpacing:'-0.02em' }}>{t.howTitle}</h2>
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:24, position:'relative' }}>
-          <div style={{ position:'absolute', top:36, right:'17%', left:'17%', height:1, background:'linear-gradient(to left, transparent, rgba(124,58,237,0.3) 30%, rgba(124,58,237,0.3) 70%, transparent)', pointerEvents:'none' }} />
+        <div style={{ display:'grid', gridTemplateColumns:cardColumns, gap:24, position:'relative' }}>
+          {!isCompact && <div style={{ position:'absolute', top:36, right:'17%', left:'17%', height:1, background:'linear-gradient(to left, transparent, rgba(124,58,237,0.3) 30%, rgba(124,58,237,0.3) 70%, transparent)', pointerEvents:'none' }} />}
           {t.steps.map((s,i) => (
             <div key={i} style={{ textAlign:'center', padding:'32px 24px', background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, transition:'all .35s' }}
               onMouseEnter={e => { e.currentTarget.style.background='rgba(124,58,237,0.07)'; e.currentTarget.style.borderColor='rgba(124,58,237,0.3)'; e.currentTarget.style.transform='translateY(-6px)' }}
@@ -442,25 +488,29 @@ export default function Landing() {
       </section>
 
       {/* ── REVIEWS ── */}
-      <section id="reviews" ref={revRef.ref} style={{ padding:'80px 40px', maxWidth:1240, margin:'0 auto', opacity:revRef.inView?1:0, transform:revRef.inView?'translateY(0)':'translateY(40px)', transition:'all 0.85s cubic-bezier(.16,1,.3,1)' }}>
-        <div style={{ textAlign:'center', marginBottom:56 }}>
+      <section id="reviews" ref={revRef.ref} style={{ padding:`${isPhone ? 56 : 80}px ${sectionPaddingX}px`, maxWidth:1240, margin:'0 auto', opacity:revRef.inView?1:0, transform:revRef.inView?'translateY(0)':'translateY(40px)', transition:'all 0.85s cubic-bezier(.16,1,.3,1)' }}>
+        <div style={{ textAlign:'center', marginBottom:isPhone?36:56 }}>
           <p style={{ fontSize:11, fontWeight:700, letterSpacing:'0.14em', color:'#7c3aed', marginBottom:12 }}>{t.reviewsLabel}</p>
           <h2 style={{ fontSize:'clamp(1.8rem,3.5vw,2.5rem)', fontWeight:800, color:'#ede9ff', margin:0, letterSpacing:'-0.02em' }}>{t.reviewsTitle}</h2>
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:18 }}>
+        <div style={{ display:'grid', gridTemplateColumns:cardColumns, gap:18 }}>
           {t.reviews.map((r,i) => (
             <div key={i} style={{ background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:24, transition:'all .3s' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor=`${REVIEW_ACCENTS[i]}40`; e.currentTarget.style.background='rgba(255,255,255,0.04)' }}
               onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.07)'; e.currentTarget.style.background='rgba(255,255,255,0.025)' }}>
-              <div style={{ display:'flex', gap:3, marginBottom:14 }}>
-                {[...Array(5)].map((_,j) => <svg key={j} width="13" height="13" viewBox="0 0 24 24" fill="#fbbf24"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>)}
+              <div style={{ marginBottom:14 }}>
+                <span style={{ fontSize:10, color:REVIEW_ACCENTS[i], border:`1px solid ${REVIEW_ACCENTS[i]}55`, background:`${REVIEW_ACCENTS[i]}14`, borderRadius:999, padding:'4px 10px', fontWeight:700 }}>
+                  {r.school}
+                </span>
               </div>
-              <p style={{ fontSize:13.5, color:'rgba(255,255,255,0.55)', lineHeight:1.75, marginBottom:18, fontStyle:'italic' }}>"{r.text}"</p>
+              <p style={{ fontSize:14, color:'rgba(255,255,255,0.72)', lineHeight:1.9, marginBottom:18, fontStyle:'normal', fontWeight:500 }}>{r.text}</p>
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <img src={REVIEW_AVATARS[i]} alt={r.name} style={{ width:38, height:38, borderRadius:'50%', objectFit:'cover', border:`2px solid ${REVIEW_ACCENTS[i]}40` }} />
+                <div style={{ width:38, height:38, borderRadius:'50%', border:`2px solid ${REVIEW_ACCENTS[i]}55`, background:`${REVIEW_ACCENTS[i]}1f`, color:REVIEW_ACCENTS[i], fontSize:12, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  {String(i + 1).padStart(2, '0')}
+                </div>
                 <div>
                   <p style={{ fontSize:13, fontWeight:700, color:'#e8e4ff', margin:0 }}>{r.name}</p>
-                  <p style={{ fontSize:11, color:'rgba(255,255,255,0.35)', margin:0 }}>{r.role} · {r.school}</p>
+                  <p style={{ fontSize:11, color:'rgba(255,255,255,0.35)', margin:0 }}>{r.role}</p>
                 </div>
               </div>
             </div>
@@ -469,8 +519,8 @@ export default function Landing() {
       </section>
 
       {/* ── CTA ── */}
-      <section style={{ padding:'60px 40px 100px', maxWidth:880, margin:'0 auto', textAlign:'center' }}>
-        <div style={{ position:'relative', background:'rgba(124,58,237,0.06)', border:'1px solid rgba(124,58,237,0.22)', borderRadius:28, padding:'64px 56px', overflow:'hidden' }}>
+      <section style={{ padding:`${isPhone ? 44 : 60}px ${sectionPaddingX}px ${isPhone ? 68 : 100}px`, maxWidth:880, margin:'0 auto', textAlign:'center' }}>
+        <div style={{ position:'relative', background:'rgba(124,58,237,0.06)', border:'1px solid rgba(124,58,237,0.22)', borderRadius:28, padding:isPhone?'44px 20px':'64px 56px', overflow:'hidden' }}>
           <div style={{ position:'absolute', inset:0, pointerEvents:'none', background:'radial-gradient(ellipse at center top, rgba(124,58,237,0.18) 0%, transparent 60%)' }} />
           <div style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:68, height:68, borderRadius:20, background:'linear-gradient(135deg,#7c3aed,#4338ca)', marginBottom:28, boxShadow:'0 16px 48px rgba(124,58,237,0.45)', animation:'floatIcon 3.5s ease-in-out infinite' }}>
             <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
@@ -478,11 +528,13 @@ export default function Landing() {
           <h2 style={{ fontSize:'clamp(1.6rem,3vw,2.3rem)', fontWeight:800, color:'#ede9ff', margin:'0 0 14px', letterSpacing:'-0.02em' }}>{t.ctaTitle}</h2>
           <p style={{ fontSize:15, color:'rgba(255,255,255,0.4)', lineHeight:1.85, margin:'0 auto 36px', maxWidth:480 }}>{t.ctaDesc}</p>
           <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' }}>
-            <button onClick={() => navigate('/register')}
-              style={{ ...btnBase, padding:'14px 40px', borderRadius:12, fontSize:15, fontWeight:700, background:'linear-gradient(135deg,#7c3aed,#4338ca)', color:'white', boxShadow:'0 8px 32px rgba(124,58,237,0.48)' }}
-              onMouseEnter={e => e.currentTarget.style.transform='scale(1.04)'}
-              onMouseLeave={e => e.currentTarget.style.transform='scale(1)'}
-            >{t.createFree}</button>
+            {canRegister && (
+              <button onClick={() => navigate('/register')}
+                style={{ ...btnBase, padding:'14px 40px', borderRadius:12, fontSize:15, fontWeight:700, background:'linear-gradient(135deg,#7c3aed,#4338ca)', color:'white', boxShadow:'0 8px 32px rgba(124,58,237,0.48)' }}
+                onMouseEnter={e => e.currentTarget.style.transform='scale(1.04)'}
+                onMouseLeave={e => e.currentTarget.style.transform='scale(1)'}
+              >{t.createFree}</button>
+            )}
             <button onClick={() => navigate('/login')}
               style={{ ...btnBase, padding:'14px 32px', borderRadius:12, fontSize:15, fontWeight:600, background:'transparent', border:'1px solid rgba(255,255,255,0.12)', color:'rgba(255,255,255,0.6)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.28)'; e.currentTarget.style.color='rgba(255,255,255,0.88)' }}
@@ -493,15 +545,15 @@ export default function Landing() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer style={{ borderTop:'1px solid rgba(255,255,255,0.06)', padding:'28px 40px' }}>
-        <div style={{ maxWidth:1240, margin:'0 auto', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <footer style={{ borderTop:'1px solid rgba(255,255,255,0.06)', padding:`${isPhone ? 22 : 28}px ${sectionPaddingX}px` }}>
+        <div style={{ maxWidth:1240, margin:'0 auto', display:'flex', flexDirection:isCompact?'column':'row', justifyContent:'space-between', alignItems:'center', gap:isCompact?14:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ width:28, height:28, borderRadius:8, background:'linear-gradient(135deg,#7c3aed,#4338ca)', display:'flex', alignItems:'center', justifyContent:'center' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/></svg>
             </div>
             <span style={{ fontSize:13, color:'rgba(255,255,255,0.35)', fontWeight:700 }}>EduSystem</span>
           </div>
-          <div style={{ display:'flex', gap:28 }}>
+          <div style={{ display:'flex', gap:isPhone?14:28, flexWrap:footerLinksWrap, justifyContent:'center' }}>
             {[t.privacy, t.terms, t.support].map(item => (
               <a key={item} href="#" style={{ fontSize:12, color:'rgba(255,255,255,0.25)', textDecoration:'none', transition:'color .2s' }}
                 onMouseEnter={e => (e.currentTarget.style.color='rgba(255,255,255,0.55)')}
@@ -509,7 +561,7 @@ export default function Landing() {
               >{item}</a>
             ))}
           </div>
-          <p style={{ fontSize:12, color:'rgba(255,255,255,0.2)', margin:0 }}>{t.footer}</p>
+          <p style={{ fontSize:12, color:'rgba(255,255,255,0.2)', margin:0, textAlign:isCompact?'center':'initial' }}>{t.footer}</p>
         </div>
       </footer>
 
@@ -521,11 +573,6 @@ export default function Landing() {
         @keyframes floatY{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
         @keyframes particleDrift{from{transform:translateY(0) translateX(0)}to{transform:translateY(-35px) translateX(18px)}}
         @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-        @media(max-width:900px){
-          div[style*="grid-template-columns: 1fr 1.1fr"]{grid-template-columns:1fr!important}
-          div[style*="repeat(3,1fr)"]{grid-template-columns:1fr!important}
-          div[style*="repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr)!important}
-        }
       `}</style>
     </div>
   )

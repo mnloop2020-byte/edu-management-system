@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { isAxiosError } from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLocale } from '../hooks/useLocale'
+import api from '../api/api'
 
 export default function Login() {
   const { login } = useAuth()
@@ -12,6 +13,27 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [canRegister, setCanRegister] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadRegistrationStatus() {
+      try {
+        const res = await api.get('/auth/registration-status')
+        if (!mounted) return
+        setCanRegister(Boolean(res.data?.registrationEnabled))
+      } catch {
+        if (!mounted) return
+        setCanRegister(false)
+      }
+    }
+
+    void loadRegistrationStatus()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const copy = locale === 'ar'
     ? {
@@ -145,7 +167,7 @@ export default function Login() {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-6 py-12" style={{ background: 'var(--bg)' }}>
+      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12" style={{ background: 'var(--bg)' }}>
         <div className="w-full max-w-[400px]">
           <div className="flex lg:hidden flex-col items-center mb-8 gap-3">
             <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(124,58,237,0.4)' }}>
@@ -173,16 +195,22 @@ export default function Login() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4" autoComplete="off" noValidate>
+            <input type="text" name="edu_fake_username" autoComplete="off" tabIndex={-1} className="hidden" />
+            <input type="password" name="edu_fake_password" autoComplete="new-password" tabIndex={-1} className="hidden" />
             <div className="flex flex-col gap-1.5">
               <label className="text-[12px] font-semibold" style={{ color: 'var(--text-muted)' }}>{copy.email}</label>
               <input
                 type="email"
+                name="edu_email"
                 value={form.email}
                 onChange={e => setForm({ ...form, email: e.target.value })}
                 placeholder={copy.emailPlaceholder}
                 className="input"
-                autoComplete="email"
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </div>
 
@@ -191,19 +219,23 @@ export default function Login() {
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  name="edu_password"
                   value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })}
                   placeholder={copy.passwordPlaceholder}
                   className="input"
                   style={{ paddingRight: isRtl ? 14 : 44, paddingLeft: isRtl ? 44 : 14 }}
-                  autoComplete="current-password"
+                  autoComplete="new-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(value => !value)}
                   style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-faint)', border: 'none', background: 'none', cursor: 'pointer', padding: 0, right: isRtl ? 'auto' : 12, left: isRtl ? 12 : 'auto' }}
                 >
-                  {showPassword ? '🙈' : '👁'}
+                  {showPassword ? 'Hide' : 'Show'}
                 </button>
               </div>
             </div>
@@ -213,16 +245,18 @@ export default function Login() {
             </button>
           </form>
 
-          <p className="text-center text-[13px] mt-6" style={{ color: 'var(--text-muted)' }}>
-            {copy.noAccount}{' '}
-            <button
-              onClick={() => navigate('/register')}
-              className="font-semibold transition-colors"
-              style={{ color: 'var(--accent-light)', background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              {copy.createAccount}
-            </button>
-          </p>
+          {canRegister && (
+            <p className="text-center text-[13px] mt-6" style={{ color: 'var(--text-muted)' }}>
+              {copy.noAccount}{' '}
+              <button
+                onClick={() => navigate('/register')}
+                className="font-semibold transition-colors"
+                style={{ color: 'var(--accent-light)', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                {copy.createAccount}
+              </button>
+            </p>
+          )}
         </div>
       </div>
     </div>

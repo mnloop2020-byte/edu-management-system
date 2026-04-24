@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLocale } from '../hooks/useLocale'
 import { toast } from '../components/ui/Toast'
 import { EmptyState } from '../components/ui/EmptyState'
+import { localizeAcademicLabel } from '../utils/academicLocalization'
 
 interface PerformanceItem {
   teacher: { id: number; name: string; subject: string }
@@ -130,7 +131,7 @@ export default function TeacherPerformance() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[15px] font-bold" style={{ color: 'var(--text)' }}>{item.teacher.name}</p>
-                      <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{item.teacher.subject}</p>
+                      <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{localizeAcademicLabel(item.teacher.subject, locale)}</p>
                     </div>
                     <span className="badge badge-purple">#{item.rank || index + 1}</span>
                   </div>
@@ -180,8 +181,8 @@ export default function TeacherPerformance() {
                   <div key={item.teacher.id} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}>
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>#{item.rank || index + 1} · {item.teacher.name}</p>
-                        <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{item.teacher.subject}</p>
+                        <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>#{item.rank || index + 1} - {item.teacher.name}</p>
+                        <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{localizeAcademicLabel(item.teacher.subject, locale)}</p>
                       </div>
                       <span className="text-[18px] font-extrabold" style={{ color: '#a78bfa' }}>{item.performanceScore}</span>
                     </div>

@@ -417,7 +417,7 @@ export default function Payments() {
         </section>
       )}
 
-      <section className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {[
           { label: copy.annualFee, value: `${summary.annualFee.toLocaleString()} ${copy.currency}`, color: '#a78bfa' },
           { label: copy.collected, value: `${summary.paid.toLocaleString()} ${copy.currency}`, color: '#10b981' },
@@ -442,7 +442,8 @@ export default function Payments() {
       </section>
 
       <section className="card overflow-hidden">
-        <table className="w-full">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[980px]">
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
               {[copy.student, copy.progress, copy.dueDate, copy.statusLabel, ''].map(header => <th key={header} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{header}</th>)}
@@ -494,6 +495,7 @@ export default function Payments() {
             })}
           </tbody>
         </table>
+        </div>
       </section>
     </div>
   )

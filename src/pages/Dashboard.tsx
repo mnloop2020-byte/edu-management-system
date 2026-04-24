@@ -4,8 +4,10 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Res
 import { useNavigate } from 'react-router-dom'
 import api from '../api/api'
 import { useLocale } from '../hooks/useLocale'
+import { useAuth } from '../context/AuthContext'
 import { SkeletonCard, SkeletonTable } from '../components/ui/Skeleton'
 import { EmptyState } from '../components/ui/EmptyState'
+import { localizeAcademicLabel } from '../utils/academicLocalization'
 
 interface Stats {
   students: number
@@ -227,10 +229,130 @@ function getRiskTone(indicator: RiskStudent['indicator'], copy: ReturnType<typeo
   return { color: '#10b981', bg: 'rgba(16,185,129,0.12)', label: copy.safe }
 }
 
+function localizeDashboardStatus(value: string, locale: 'ar' | 'en') {
+  if (locale !== 'ar') return value
+
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'present') return 'حاضر'
+  if (normalized === 'late') return 'متأخر'
+  if (normalized === 'absent') return 'غائب'
+  if (normalized === 'active') return 'نشط'
+  if (normalized === 'on leave') return 'إجازة'
+  return value
+}
+
+function localizeDashboardText(value: string, locale: 'ar' | 'en') {
+  const raw = String(value || '').trim()
+  if (!raw || locale !== 'ar') return raw
+
+  let result = raw
+
+  result = result.replace(/^Student added$/i, 'تمت إضافة طالب')
+  result = result.replace(/^Attendance recorded$/i, 'تم تسجيل الحضور')
+  result = result.replace(/^Payment received$/i, 'تم استلام دفعة')
+  result = result.replace(/^Assignment created$/i, 'تم إنشاء واجب')
+  result = result.replace(/^Attendance dropped compared with the previous days$/i, 'انخفض الحضور مقارنة بالأيام السابقة')
+  result = result.replace(/^Daily operations look healthy today$/i, 'العمليات اليومية تسير بشكل جيد اليوم')
+  result = result.replace(/^Attendance dropped this week$/i, 'انخفض الحضور هذا الأسبوع')
+  result = result.replace(/^Enrollment slowed this month$/i, 'انخفض التسجيل هذا الشهر')
+  result = result.replace(/^Open payments to review overdue balances$/i, 'افتح المدفوعات لمراجعة المبالغ المتأخرة')
+  result = result.replace(/^Review daily attendance trends and at-risk students$/i, 'راجع اتجاهات الحضور اليومية والطلاب المعرضين للخطر')
+  result = result.replace(/^Student registrations are down compared with last month$/i, 'تسجيلات الطلاب أقل مقارنة بالشهر الماضي')
+
+  result = result.replace(
+    /^(\d+) students are close to the absence limit$/i,
+    (_, count) => `يوجد ${count} طلاب قريبون من حد الغياب`,
+  )
+  result = result.replace(
+    /^(\d+) overdue payments need follow-up$/i,
+    (_, count) => `يوجد ${count} مدفوعات متأخرة تحتاج متابعة`,
+  )
+  result = result.replace(
+    /^(.+) is over the absence limit$/i,
+    (_, name) => `${name} تجاوز حد الغياب`,
+  )
+  result = result.replace(
+    /^(.+) is near the absence limit$/i,
+    (_, name) => `${name} قريب من حد الغياب`,
+  )
+  result = result.replace(
+    /^(\d+) absences recorded this semester$/i,
+    (_, count) => `تم تسجيل ${count} حالات غياب هذا الفصل`,
+  )
+  result = result.replace(
+    /^(.+) joined (.+)$/i,
+    (_, name, course) => `${name} انضم إلى ${localizeAcademicLabel(course, locale)}`,
+  )
+  result = result.replace(
+    /^(.+) marked (.+)$/i,
+    (_, name, status) => `${name} تم تسجيله ${localizeDashboardStatus(status, locale)}`,
+  )
+  result = result.replace(
+    /^(.+) paid ([\d.,]+) SAR$/i,
+    (_, name, amount) => `${name} دفع ${amount} ر.س`,
+  )
+
+  return result
+}
+
+function getActivityTone(type: string) {
+  if (type === 'payment') return { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', glyph: '$' }
+  if (type === 'attendance') return { color: '#10b981', bg: 'rgba(16,185,129,0.12)', glyph: '%' }
+  if (type === 'assignment') return { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', glyph: '✓' }
+  return { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', glyph: '+' }
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { locale } = useLocale()
+  const role = String(user?.role || '').toUpperCase()
+  const isStudent = role === 'STUDENT'
   const copy = useMemo(() => getCopy(locale), [locale])
+  const studentText = useMemo(
+    () => (locale === 'ar'
+      ? {
+          heroTitle: 'تابع مستواك الدراسي بثقة.',
+          heroSubtitle: 'اللوحة تعرض بياناتك فقط: الحضور، الواجبات، المدفوعات والتنبيهات المهمة.',
+          profileAction: 'ملفي الدراسي',
+          assignmentsAction: 'واجباتي',
+          paymentsAction: 'مدفوعاتي',
+          calendarAction: 'التقويم',
+          myAttendance: 'الحضور',
+          myPendingPayments: 'المدفوعات المعلقة',
+          myAlerts: 'التنبيهات',
+          myAccount: 'حسابي',
+          accountLinked: 'الحساب مرتبط بملفك',
+          accountMissing: 'الحساب غير مرتبط بملف طالب',
+          attentionToday: 'متابعة يومية مخصصة لك',
+          profileCardTitle: 'ملفي الأكاديمي',
+          profileCardSubtitle: 'الوصول السريع إلى ملف الطالب وكشف الدرجات.',
+          openProfile: 'افتح ملفي',
+          openTranscript: 'كشف الدرجات',
+          openProfileFeed: 'افتح ملفي',
+        }
+      : {
+          heroTitle: 'Track your academic progress with clarity.',
+          heroSubtitle: 'Your dashboard shows only your data: attendance, assignments, payments, and alerts.',
+          profileAction: 'My Profile',
+          assignmentsAction: 'My Assignments',
+          paymentsAction: 'My Payments',
+          calendarAction: 'Calendar',
+          myAttendance: 'Attendance',
+          myPendingPayments: 'Pending Payments',
+          myAlerts: 'Alerts',
+          myAccount: 'My Account',
+          accountLinked: 'Account linked to your student profile',
+          accountMissing: 'Account is not linked to a student profile',
+          attentionToday: 'Your personalized daily focus',
+          profileCardTitle: 'My Academic Profile',
+          profileCardSubtitle: 'Quick access to your student profile and transcript.',
+          openProfile: 'Open my profile',
+          openTranscript: 'Transcript',
+          openProfileFeed: 'Open profile',
+        }),
+    [locale],
+  )
   const [data, setData] = useState<DashboardResponse>({
     stats: { students: 0, teachers: 0, attendanceRate: 0, pendingPayments: 0 },
     weekly: [],
@@ -272,18 +394,74 @@ export default function Dashboard() {
     void fetchData()
   }, [fetchData])
 
-  const cards = useMemo(() => [
-    { title: copy.students, value: data.stats.students, helper: copy.enrolled, color: '#a78bfa', bg: 'rgba(124,58,237,0.14)' },
-    { title: copy.teachers, value: data.stats.teachers, helper: copy.faculty, color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
-    { title: copy.attendance, value: `${data.stats.attendanceRate}%`, helper: data.stats.attendanceRate >= 85 ? copy.healthyToday : copy.needsAttention, color: '#10b981', bg: 'rgba(16,185,129,0.14)' },
-    { title: copy.pendingPayments, value: data.stats.pendingPayments, helper: copy.paymentItems, color: '#f87171', bg: 'rgba(248,113,113,0.14)' },
-  ], [copy, data.stats])
+  const cards = useMemo(() => {
+    if (isStudent) {
+      return [
+        {
+          title: studentText.myAttendance,
+          value: `${data.stats.attendanceRate}%`,
+          helper: data.stats.attendanceRate >= 85 ? copy.healthyToday : copy.needsAttention,
+          color: '#10b981',
+          bg: 'rgba(16,185,129,0.14)',
+        },
+        {
+          title: studentText.myPendingPayments,
+          value: data.stats.pendingPayments,
+          helper: copy.paymentItems,
+          color: '#f87171',
+          bg: 'rgba(248,113,113,0.14)',
+        },
+        {
+          title: studentText.myAlerts,
+          value: data.insights.length,
+          helper: studentText.attentionToday,
+          color: '#a78bfa',
+          bg: 'rgba(124,58,237,0.14)',
+        },
+        {
+          title: studentText.myAccount,
+          value: data.recentStudents.length > 0 ? (locale === 'ar' ? 'مربوط' : 'Linked') : (locale === 'ar' ? 'غير مربوط' : 'Unlinked'),
+          helper: data.recentStudents.length > 0 ? studentText.accountLinked : studentText.accountMissing,
+          color: '#60a5fa',
+          bg: 'rgba(96,165,250,0.14)',
+        },
+      ]
+    }
 
-  const actionConfig = useMemo(() => [
-    { label: copy.addStudent, path: '/students', color: '#a78bfa' },
-    { label: copy.takeAttendance, path: '/attendance', color: '#10b981' },
-    { label: copy.createAssignment, path: '/assignments', color: '#60a5fa' },
-  ], [copy])
+    return [
+      { title: copy.students, value: data.stats.students, helper: copy.enrolled, color: '#a78bfa', bg: 'rgba(124,58,237,0.14)' },
+      { title: copy.teachers, value: data.stats.teachers, helper: copy.faculty, color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
+      { title: copy.attendance, value: `${data.stats.attendanceRate}%`, helper: data.stats.attendanceRate >= 85 ? copy.healthyToday : copy.needsAttention, color: '#10b981', bg: 'rgba(16,185,129,0.14)' },
+      { title: copy.pendingPayments, value: data.stats.pendingPayments, helper: copy.paymentItems, color: '#f87171', bg: 'rgba(248,113,113,0.14)' },
+    ]
+  }, [copy, data.insights.length, data.recentStudents.length, data.stats, isStudent, locale, studentText])
+
+  const actionConfig = useMemo(() => {
+    if (isStudent) {
+      return [
+        { label: studentText.profileAction, path: '/students/me', color: '#a78bfa' },
+        { label: studentText.assignmentsAction, path: '/assignments', color: '#60a5fa' },
+        { label: studentText.paymentsAction, path: '/payments', color: '#f59e0b' },
+        { label: studentText.calendarAction, path: '/calendar', color: '#10b981' },
+      ]
+    }
+
+    return [
+      { label: copy.addStudent, path: '/students', color: '#a78bfa' },
+      { label: copy.takeAttendance, path: '/attendance', color: '#10b981' },
+      { label: copy.createAssignment, path: '/assignments', color: '#60a5fa' },
+    ]
+  }, [copy, isStudent, studentText])
+
+  const insightPath = useCallback((index: number) => {
+    if (isStudent) {
+      if (index === 0) return '/students/me'
+      if (index === 1) return '/calendar'
+      if (index === 2) return '/payments'
+      return '/assignments'
+    }
+    return index === 0 ? '/attendance' : index === 2 ? '/payments' : '/reports'
+  }, [isStudent])
 
   const paymentStatusChart = [
     { label: copy.paid, value: data.paymentStatus.paid },
@@ -308,8 +486,8 @@ export default function Dashboard() {
           <div className="absolute inset-0 opacity-60" style={{ background: 'radial-gradient(circle at top right, rgba(124,58,237,0.22), transparent 40%)' }} />
           <div className="relative">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em]" style={{ color: 'var(--text-faint)' }}>{copy.controlCenter}</p>
-            <h2 className="text-[28px] font-extrabold mt-2 leading-tight" style={{ color: 'var(--text)' }}>{copy.heroTitle}</h2>
-            <p className="text-[13px] mt-3 max-w-[560px]" style={{ color: 'var(--text-muted)' }}>{copy.heroSubtitle}</p>
+            <h2 className="text-[28px] font-extrabold mt-2 leading-tight" style={{ color: 'var(--text)' }}>{isStudent ? studentText.heroTitle : copy.heroTitle}</h2>
+            <p className="text-[13px] mt-3 max-w-[560px]" style={{ color: 'var(--text-muted)' }}>{isStudent ? studentText.heroSubtitle : copy.heroSubtitle}</p>
             <div className="flex flex-wrap gap-2 mt-5">
               {actionConfig.map(action => (
                 <button key={action.label} onClick={() => navigate(action.path)} className="btn-ghost px-4 py-2 text-[12px]" style={{ borderRadius: 12, color: action.color }}>
@@ -324,7 +502,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.aiInsights}</h3>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{copy.attentionToday}</p>
+              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{isStudent ? studentText.attentionToday : copy.attentionToday}</p>
             </div>
             <span className="badge badge-purple">{loading ? '...' : `${data.insights.length} ${copy.alerts}`}</span>
           </div>
@@ -332,11 +510,11 @@ export default function Dashboard() {
             {loading ? Array.from({ length: 3 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 54 }} />) : data.insights.map((item, index) => (
               <button
                 key={item}
-                onClick={() => navigate(index === 0 ? '/attendance' : index === 2 ? '/payments' : '/reports')}
+                onClick={() => navigate(insightPath(index))}
                 className="w-full text-left rounded-xl p-3 transition-all hover:translate-y-[-1px]"
                 style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}
               >
-                <p className="text-[12px] font-semibold" style={{ color: 'var(--text)' }}>{item}</p>
+                <p className="text-[12px] font-semibold" style={{ color: 'var(--text)' }}>{localizeDashboardText(item, locale)}</p>
                 <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{copy.openRelated}</p>
               </button>
             ))}
@@ -344,7 +522,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 xl:grid-cols-4 gap-4 stagger">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 stagger">
         {loading ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />) : cards.map(card => (
           <div key={card.title} className="card p-5 card-glow animate-slide-up">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: card.bg, color: card.color }}>
@@ -504,88 +682,105 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-[0.95fr_1.05fr] gap-4">
-        <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
+      {isStudent ? (
+        <section className="card p-5">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.riskStudents}</h3>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{copy.absenceAlerts}</p>
+              <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{studentText.profileCardTitle}</h3>
+              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{studentText.profileCardSubtitle}</p>
             </div>
-            <button onClick={() => navigate('/students?status=at-risk')} className="btn-ghost px-3 py-1.5 text-[12px]">{copy.openStudents}</button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => navigate('/students/me')} className="btn-ghost px-3 py-1.5 text-[12px]">{studentText.openProfile}</button>
+              <button onClick={() => navigate('/transcripts')} className="btn-primary px-3 py-1.5 text-[12px]">{studentText.openTranscript}</button>
+            </div>
           </div>
-          <div className="space-y-2.5">
-            {loading ? Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 62 }} />) : data.riskStudents.length === 0 ? (
-              <EmptyState title={copy.noRiskStudents} message={copy.noRiskStudentsMessage} />
-            ) : data.riskStudents.map(student => {
-              const tone = getRiskTone(student.indicator, copy)
-              return (
-                <button
-                  key={student.id}
-                  onClick={() => navigate(`/students?status=at-risk&studentId=${student.id}`)}
-                  className="w-full rounded-xl p-4 text-left transition-all hover:translate-y-[-1px]"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>{student.name}</p>
-                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{student.course}</p>
+        </section>
+      ) : (
+        <section className="grid grid-cols-1 xl:grid-cols-[0.95fr_1.05fr] gap-4">
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.riskStudents}</h3>
+                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{copy.absenceAlerts}</p>
+              </div>
+              <button onClick={() => navigate('/students?status=at-risk')} className="btn-ghost px-3 py-1.5 text-[12px]">{copy.openStudents}</button>
+            </div>
+            <div className="space-y-2.5">
+              {loading ? Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 62 }} />) : data.riskStudents.length === 0 ? (
+                <EmptyState title={copy.noRiskStudents} message={copy.noRiskStudentsMessage} />
+              ) : data.riskStudents.map(student => {
+                const tone = getRiskTone(student.indicator, copy)
+                return (
+                  <button
+                    key={student.id}
+                    onClick={() => navigate(`/students?status=at-risk&studentId=${student.id}`)}
+                    className="w-full rounded-xl p-4 text-left transition-all hover:translate-y-[-1px]"
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>{student.name}</p>
+                        <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{student.course}</p>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: tone.bg, color: tone.color }}>
+                        {tone.label}
+                      </span>
                     </div>
-                    <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: tone.bg, color: tone.color }}>
-                      {tone.label}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between mt-3">
-                    <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{copy.absences} {student.absentCount}/4</p>
-                    <p className="text-[12px] font-semibold" style={{ color: tone.color }}>{student.attendanceRate}% {copy.attendanceSuffix}</p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="card overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
-            <div>
-              <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.recentStudents}</h3>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{copy.latestEnrollment}</p>
+                    <div className="flex items-center justify-between mt-3">
+                      <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{copy.absences} {student.absentCount}/4</p>
+                      <p className="text-[12px] font-semibold" style={{ color: tone.color }}>{student.attendanceRate}% {copy.attendanceSuffix}</p>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
-            <button onClick={() => navigate('/students')} className="btn-ghost px-3 py-1.5 text-[12px]">{copy.viewAll}</button>
           </div>
-          <table className="w-full">
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {[copy.student, copy.course, copy.grade, copy.status].map(header => (
-                  <th key={header} className="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{header}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <SkeletonTable rows={4} cols={4} />
-              ) : data.recentStudents.length === 0 ? (
-                <tr><td colSpan={4}><EmptyState title={copy.noStudentsYet} message={copy.noStudentsYetMessage} /></td></tr>
-              ) : data.recentStudents.map(student => (
-                <tr
-                  key={student.id}
-                  className="cursor-pointer transition-colors"
-                  style={{ borderBottom: '1px solid var(--border)' }}
-                  onClick={() => navigate(`/students/${student.id}`)}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <td className="px-6 py-3.5 text-[13px] font-semibold" style={{ color: 'var(--text)' }}>{student.name}</td>
-                  <td className="px-6 py-3.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>{student.course || '-'}</td>
-                  <td className="px-6 py-3.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>{student.grade || '-'}</td>
-                  <td className="px-6 py-3.5">
-                    <span className={`badge ${student.status === 'Active' ? 'badge-success' : 'badge-warning'}`}>{student.status}</span>
-                  </td>
+
+          <div className="card overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.recentStudents}</h3>
+                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{copy.latestEnrollment}</p>
+              </div>
+              <button onClick={() => navigate('/students')} className="btn-ghost px-3 py-1.5 text-[12px]">{copy.viewAll}</button>
+            </div>
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px]">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  {[copy.student, copy.course, copy.grade, copy.status].map(header => (
+                    <th key={header} className="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{header}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <SkeletonTable rows={4} cols={4} />
+                ) : data.recentStudents.length === 0 ? (
+                  <tr><td colSpan={4}><EmptyState title={copy.noStudentsYet} message={copy.noStudentsYetMessage} /></td></tr>
+                ) : data.recentStudents.map(student => (
+                  <tr
+                    key={student.id}
+                    className="cursor-pointer transition-colors"
+                    style={{ borderBottom: '1px solid var(--border)' }}
+                    onClick={() => navigate(`/students/${student.id}`)}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td className="px-6 py-3.5 text-[13px] font-semibold" style={{ color: 'var(--text)' }}>{student.name}</td>
+                    <td className="px-6 py-3.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>{student.course || '-'}</td>
+                    <td className="px-6 py-3.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>{student.grade || '-'}</td>
+                    <td className="px-6 py-3.5">
+                      <span className={`badge ${student.status === 'Active' ? 'badge-success' : 'badge-warning'}`}>{student.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="card p-5">
         <div className="flex items-center justify-between mb-4">
@@ -593,7 +788,7 @@ export default function Dashboard() {
             <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.activityFeed}</h3>
             <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{copy.activitySubtitle}</p>
           </div>
-          <button onClick={() => navigate('/reports')} className="btn-ghost px-3 py-1.5 text-[12px]">{copy.openReports}</button>
+          <button onClick={() => navigate(isStudent ? '/students/me' : '/reports')} className="btn-ghost px-3 py-1.5 text-[12px]">{isStudent ? studentText.openProfileFeed : copy.openReports}</button>
         </div>
         {loading ? (
           <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 58 }} />)}</div>
@@ -601,24 +796,35 @@ export default function Dashboard() {
           <EmptyState title={copy.noRecentActivity} message={copy.noRecentActivityMessage} />
         ) : (
           <div className="space-y-2.5">
-            {data.activityFeed.map(item => (
-              <button
-                key={`${item.type}-${item.createdAt}-${item.title}`}
-                onClick={() => navigate(item.path)}
-                className="w-full text-left rounded-xl p-4 transition-all hover:translate-y-[-1px]"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[12px] font-semibold" style={{ color: 'var(--text)' }}>{item.title}</p>
-                    <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{item.description}</p>
+            {data.activityFeed.map(item => {
+              const tone = getActivityTone(item.type)
+              return (
+                <button
+                  key={`${item.type}-${item.createdAt}-${item.title}`}
+                  onClick={() => navigate(item.path)}
+                  className="w-full text-left rounded-xl p-4 transition-all hover:translate-y-[-1px]"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[12px] font-bold"
+                      style={{ color: tone.color, background: tone.bg }}
+                    >
+                      {tone.glyph}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <p className="text-[12px] font-semibold" style={{ color: 'var(--text)' }}>{localizeDashboardText(item.title, locale)}</p>
+                        <span className="text-[10px] whitespace-nowrap" style={{ color: 'var(--text-faint)' }}>
+                          {new Date(item.createdAt).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
+                      <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{localizeDashboardText(item.description, locale)}</p>
+                    </div>
                   </div>
-                  <span className="text-[10px] whitespace-nowrap" style={{ color: 'var(--text-faint)' }}>
-                    {new Date(item.createdAt).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' })}
-                  </span>
-                </div>
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
         )}
       </section>

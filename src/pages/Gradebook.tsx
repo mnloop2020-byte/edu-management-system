@@ -3,6 +3,7 @@ import api from '../api/api'
 import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../components/ui/Toast'
 import { useLocale } from '../hooks/useLocale'
+import { localizeAcademicCode, localizeAcademicLabel } from '../utils/academicLocalization'
 
 interface OfferingItem {
   id: number
@@ -188,13 +189,13 @@ export default function Gradebook() {
                   border: `1px solid ${active ? 'rgba(124,58,237,0.28)' : 'var(--border)'}`,
                 }}
               >
-                <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>{offering.subject.name}</p>
+                <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>{localizeAcademicLabel(offering.subject.name, locale)}</p>
                 <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
-                  {offering.subject.code} • {offering.semester.name} • {offering.section}
+                  {localizeAcademicCode(offering.subject.code, locale)} - {offering.semester.name} - {offering.section}
                 </p>
                 <div className="flex items-center justify-between mt-3 text-[11px]" style={{ color: 'var(--text-faint)' }}>
                   <span>{copy.students}: {offering.studentsCount}</span>
-                  <span>{copy.teacher}: {offering.teacher?.name || '—'}</span>
+                  <span>{copy.teacher}: {offering.teacher?.name || '-'}</span>
                 </div>
               </button>
             )
@@ -205,7 +206,7 @@ export default function Gradebook() {
           <div className="px-5 py-4 flex items-center justify-between gap-3 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
             <div>
               <h3 className="text-[15px] font-bold" style={{ color: 'var(--text)' }}>
-                {details?.offering.subject.name} {details ? `• ${details.offering.section}` : ''}
+                {details ? `${localizeAcademicLabel(details.offering.subject.name, locale)} - ${details.offering.section}` : ''}
               </h3>
               <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
                 {copy.rule}: {weightSummary}

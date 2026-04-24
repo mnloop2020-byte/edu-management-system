@@ -4,6 +4,7 @@ import api from '../api/api'
 import { useAuth } from '../context/AuthContext'
 import { useLocale } from '../hooks/useLocale'
 import { toast } from '../components/ui/Toast'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 
 interface WorkflowRule {
   id: string
@@ -131,6 +132,10 @@ export default function WorkflowBuilder() {
   const { user } = useAuth()
   const { locale } = useLocale()
   const copy = getCopy(locale)
+  const deleteTitle = locale === 'ar' ? 'تأكيد الحذف' : 'Confirm deletion'
+  const deleteMessage = locale === 'ar' ? 'هل أنت متأكد من حذف سير العمل المحدد؟' : 'Are you sure you want to delete the selected workflow?'
+  const cancelLabel = locale === 'ar' ? 'إلغاء' : 'Cancel'
+  const confirmLabel = locale === 'ar' ? 'تأكيد' : 'Confirm'
   const options = useMemo(() => getOptions(locale), [locale])
   const { triggerOptions, conditionOptions, actionOptions, starterRules } = options
   const isAdmin = user?.role === 'ADMIN'
@@ -139,6 +144,7 @@ export default function WorkflowBuilder() {
   const [form, setForm] = useState({ name: '', trigger: triggerOptions[0], condition: conditionOptions[0], action: actionOptions[0] })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const saveTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -221,6 +227,7 @@ export default function WorkflowBuilder() {
     const next = rules.filter(rule => rule.id !== selectedId)
     setRules(next)
     setSelectedId(next[0]?.id ?? null)
+    setDeleteOpen(false)
   }
 
   function moveRule(ruleId: string, direction: 'up' | 'down') {
@@ -254,6 +261,16 @@ export default function WorkflowBuilder() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      <ConfirmDialog
+        open={deleteOpen}
+        title={deleteTitle}
+        message={deleteMessage}
+        cancelLabel={cancelLabel}
+        confirmLabel={confirmLabel}
+        onConfirm={deleteSelected}
+        onCancel={() => setDeleteOpen(false)}
+      />
+
       <section className="card p-6 relative overflow-hidden">
         <div className="absolute inset-0 opacity-50" style={{ background: 'radial-gradient(circle at top right, rgba(124,58,237,0.18), transparent 40%)' }} />
         <div className="relative flex items-start justify-between gap-4 flex-wrap">
@@ -343,7 +360,7 @@ export default function WorkflowBuilder() {
                 <button onClick={() => updateSelected({ active: !selected.active })} className="btn-ghost px-3 py-1.5 text-[12px]">
                   {selected.active ? copy.pause : copy.resume}
                 </button>
-                <button onClick={deleteSelected} className="btn-ghost px-3 py-1.5 text-[12px]" style={{ color: '#f87171' }}>{copy.delete}</button>
+                <button onClick={() => setDeleteOpen(true)} className="btn-ghost px-3 py-1.5 text-[12px]" style={{ color: '#f87171' }}>{copy.delete}</button>
               </div>
             )}
           </div>

@@ -256,7 +256,7 @@ export default function Attendance() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {[
           { label: copy.attendanceRate, value: `${attendanceRate}%`, color: attendanceRate >= 85 ? '#10b981' : '#fbbf24' },
           { label: copy.present, value: counts.present, color: '#10b981' },
@@ -325,7 +325,8 @@ export default function Attendance() {
         <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.dailyMarking}</h3>
         </div>
-        <table className="w-full">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[940px]">
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
               {[copy.student, copy.course, copy.today, copy.semester, isAdmin ? copy.mark : ''].filter(Boolean).map(header => (
@@ -388,6 +389,7 @@ export default function Attendance() {
             })}
           </tbody>
         </table>
+        </div>
       </section>
     </div>
   )

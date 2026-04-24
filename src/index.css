@@ -237,3 +237,119 @@ th { text-align: left; }
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
 }
+
+.transcript-print-head {
+  display: none;
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #ffffff;
+    --border: rgba(15, 23, 42, 0.16);
+    --border-hover: rgba(15, 23, 42, 0.16);
+    --text: #111827;
+    --text-muted: #475569;
+    --text-faint: #64748b;
+    --accent: #111827;
+    --accent-light: #111827;
+    --accent-glow: rgba(0, 0, 0, 0);
+    --shadow-card: none;
+    --shadow-glow: none;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .transcript-print-sheet,
+  .transcript-print-sheet * {
+    visibility: visible !important;
+  }
+
+  .transcript-print-sheet {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .transcript-print-head {
+    display: block !important;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 2px solid #e5e7eb;
+  }
+
+  .transcript-print-head h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 800;
+    color: #111827 !important;
+  }
+
+  .transcript-print-head p {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #475569 !important;
+  }
+
+  .transcript-print-stat {
+    background: #ffffff !important;
+    border: 1px solid #dbe1ea !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  .transcript-print-table {
+    min-width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .transcript-print-table th,
+  .transcript-print-table td {
+    color: #111827 !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    background: #ffffff !important;
+  }
+
+  .transcript-print-table .badge {
+    background: transparent !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #111827 !important;
+    box-shadow: none !important;
+  }
+
+  .print-hide,
+  .btn-primary,
+  .btn-ghost,
+  aside,
+  header,
+  nav,
+  .ToastContainer,
+  .toast-container {
+    display: none !important;
+  }
+
+  .card {
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+}

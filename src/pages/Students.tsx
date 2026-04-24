@@ -21,6 +21,11 @@ interface Student {
   attendanceRate?: number
   absentCount?: number
   indicator?: 'SAFE' | 'WARNING' | 'RISK'
+  account?: {
+    id: number
+    email: string
+    createdAt: string
+  } | null
 }
 
 interface Analysis {
@@ -30,6 +35,7 @@ interface Analysis {
 }
 
 type StudentFormKey = 'name' | 'course' | 'grade'
+type AccountFormKey = 'email' | 'password'
 
 const FILTERS = ['All', 'Active', 'At Risk'] as const
 const avatarColors = ['from-violet-500 to-indigo-600', 'from-blue-500 to-cyan-600', 'from-emerald-500 to-teal-600', 'from-amber-400 to-orange-500', 'from-pink-500 to-rose-600']
@@ -42,6 +48,10 @@ function getRiskStyle(indicator: Student['indicator'], locale: 'ar' | 'en') {
   if (indicator === 'RISK') return { color: '#f87171', bg: 'rgba(248,113,113,0.12)', label: locale === 'ar' ? 'خطر' : 'Risk' }
   if (indicator === 'WARNING') return { color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', label: locale === 'ar' ? 'تحذير' : 'Warning' }
   return { color: '#10b981', bg: 'rgba(16,185,129,0.12)', label: locale === 'ar' ? 'آمن' : 'Safe' }
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim().toLowerCase())
 }
 
 function getCopy(locale: 'ar' | 'en') {
@@ -173,6 +183,35 @@ export default function Students() {
   const { locale } = useLocale()
   const copy = useMemo(() => getCopy(locale), [locale])
   const isAdmin = user?.role === 'ADMIN'
+  const accountCopy = useMemo(() => ({
+    createAccount: locale === 'ar' ? 'إنشاء حساب' : 'Create Account',
+    createStudentAccount: locale === 'ar' ? 'إنشاء حساب للطالب' : 'Create Student Account',
+    accountEmail: locale === 'ar' ? 'بريد الطالب *' : 'Student Email *',
+    accountPassword: locale === 'ar' ? 'كلمة مرور مؤقتة *' : 'Temporary Password *',
+    accountCreated: locale === 'ar' ? 'تم إنشاء حساب الطالب' : 'Student account created successfully',
+    accountCreateError: locale === 'ar' ? 'فشل إنشاء حساب الطالب' : 'Failed to create student account',
+    accountReady: locale === 'ar' ? 'جاهز لتسجيل الدخول' : 'Ready to log in',
+    creatingAccount: locale === 'ar' ? 'جارٍ إنشاء الحساب...' : 'Creating account...',
+    noAccountYet: locale === 'ar' ? 'لا يوجد حساب دخول بعد' : 'No login account yet',
+    loginEmailPlaceholder: 'student@email.com',
+    tempPasswordPlaceholder: locale === 'ar' ? '8 أحرف على الأقل' : 'At least 8 characters',
+    accountHint: locale === 'ar'
+      ? 'سيتم ربط هذا الحساب بالطالب المحدد مباشرة.'
+      : 'This account will be linked directly to the selected student.',
+  }), [locale])
+  const editAccountCopy = useMemo(() => ({
+    title: locale === 'ar' ? 'تعديل حساب الطالب' : 'Edit Student Account',
+    action: locale === 'ar' ? 'تعديل الحساب' : 'Update Account',
+    loading: locale === 'ar' ? 'جارٍ تعديل الحساب...' : 'Updating account...',
+    success: locale === 'ar' ? 'تم تعديل حساب الطالب' : 'Student account updated successfully',
+    error: locale === 'ar' ? 'فشل تعديل حساب الطالب' : 'Failed to update student account',
+    emailLabel: locale === 'ar' ? 'بريد الطالب *' : 'Student Email *',
+    passwordLabel: locale === 'ar' ? 'كلمة مرور جديدة (اختياري)' : 'New Password (Optional)',
+    emailPlaceholder: 'student@email.com',
+    passwordPlaceholder: locale === 'ar' ? 'اتركها فارغة إذا لا تريد تغييرها' : 'Leave empty to keep current password',
+    hint: locale === 'ar' ? 'يمكنك تصحيح البريد الخاطئ وتغيير كلمة المرور عند الحاجة.' : 'Use this to fix email typos and reset password if needed.',
+    invalidEmail: locale === 'ar' ? 'صيغة البريد غير صحيحة' : 'Invalid email format',
+  }), [locale])
 
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
@@ -182,6 +221,14 @@ export default function Students() {
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ name: '', course: '', grade: '', status: 'Active' })
   const [saving, setSaving] = useState(false)
+  const [accountModal, setAccountModal] = useState(false)
+  const [accountStudent, setAccountStudent] = useState<Student | null>(null)
+  const [accountForm, setAccountForm] = useState({ email: '', password: '' })
+  const [accountSaving, setAccountSaving] = useState(false)
+  const [editAccountModal, setEditAccountModal] = useState(false)
+  const [editAccountStudent, setEditAccountStudent] = useState<Student | null>(null)
+  const [editAccountForm, setEditAccountForm] = useState({ email: '', password: '' })
+  const [editAccountSaving, setEditAccountSaving] = useState(false)
   const [syncLoading, setSyncLoading] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleteName, setDeleteName] = useState('')
@@ -255,6 +302,71 @@ export default function Students() {
     }
   }
 
+  function openAccountModal(student: Student) {
+    setAccountStudent(student)
+    setAccountForm({ email: '', password: '' })
+    setAccountModal(true)
+  }
+
+  async function handleCreateAccount() {
+    if (!accountStudent || !accountForm.email || !accountForm.password) return
+
+    if (!isValidEmail(accountForm.email)) {
+      toast.error(editAccountCopy.invalidEmail)
+      return
+    }
+
+    setAccountSaving(true)
+    try {
+      await api.post(`/students/${accountStudent.id}/account`, accountForm)
+      setAccountModal(false)
+      setAccountStudent(null)
+      setAccountForm({ email: '', password: '' })
+      await fetchStudents()
+      toast.success(accountCopy.accountCreated)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || accountCopy.accountCreateError)
+    } finally {
+      setAccountSaving(false)
+    }
+  }
+
+  function openEditAccountModal(student: Student) {
+    if (!student.account?.email) return
+    setEditAccountStudent(student)
+    setEditAccountForm({ email: student.account.email, password: '' })
+    setEditAccountModal(true)
+  }
+
+  async function handleUpdateAccount() {
+    if (!editAccountStudent || !editAccountForm.email) return
+
+    if (!isValidEmail(editAccountForm.email)) {
+      toast.error(editAccountCopy.invalidEmail)
+      return
+    }
+
+    setEditAccountSaving(true)
+    try {
+      const payload: { email: string; password?: string } = {
+        email: editAccountForm.email.trim().toLowerCase(),
+      }
+      if (editAccountForm.password.trim()) {
+        payload.password = editAccountForm.password
+      }
+      await api.put(`/students/${editAccountStudent.id}/account`, payload)
+      setEditAccountModal(false)
+      setEditAccountStudent(null)
+      setEditAccountForm({ email: '', password: '' })
+      await fetchStudents()
+      toast.success(editAccountCopy.success)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || editAccountCopy.error)
+    } finally {
+      setEditAccountSaving(false)
+    }
+  }
+
   async function handleSyncAcademicData() {
     if (!isAdmin) return
     setSyncLoading(true)
@@ -313,6 +425,16 @@ export default function Students() {
     { label: copy.grade, key: 'grade', placeholder: copy.gradePlaceholder },
   ]
 
+  const accountFields: Array<{ label: string; key: AccountFormKey; placeholder: string; type?: string }> = [
+    { label: accountCopy.accountEmail, key: 'email', placeholder: accountCopy.loginEmailPlaceholder, type: 'email' },
+    { label: accountCopy.accountPassword, key: 'password', placeholder: accountCopy.tempPasswordPlaceholder, type: 'password' },
+  ]
+
+  const editAccountFields: Array<{ label: string; key: AccountFormKey; placeholder: string; type?: string }> = [
+    { label: editAccountCopy.emailLabel, key: 'email', placeholder: editAccountCopy.emailPlaceholder, type: 'email' },
+    { label: editAccountCopy.passwordLabel, key: 'password', placeholder: editAccountCopy.passwordPlaceholder, type: 'password' },
+  ]
+
   return (
     <div className="space-y-5 animate-fade-in">
       <ConfirmDialog
@@ -354,6 +476,108 @@ export default function Students() {
               ].map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={accountModal && isAdmin}
+        onClose={() => {
+          setAccountModal(false)
+          setAccountStudent(null)
+        }}
+        title={accountStudent ? `${accountCopy.createStudentAccount}: ${accountStudent.name}` : accountCopy.createStudentAccount}
+        footer={
+          <div className="flex gap-2.5">
+            <button
+              onClick={() => {
+                setAccountModal(false)
+                setAccountStudent(null)
+              }}
+              className="btn-ghost flex-1 py-2.5 text-[13px] rounded-xl"
+            >
+              {copy.cancel}
+            </button>
+            <button
+              onClick={handleCreateAccount}
+              disabled={accountSaving || !accountForm.email || !accountForm.password}
+              className="btn-primary flex-1 py-2.5 text-[13px] rounded-xl"
+            >
+              {accountSaving ? accountCopy.creatingAccount : accountCopy.createAccount}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div
+            className="rounded-xl px-3 py-2.5 text-[12px]"
+            style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.18)', color: 'var(--text-muted)' }}
+          >
+            {accountCopy.accountHint}
+          </div>
+          {accountFields.map(field => (
+            <div key={field.key} className="space-y-1.5">
+              <label className="text-[12px] font-semibold" style={{ color: 'var(--text-muted)' }}>{field.label}</label>
+              <input
+                value={accountForm[field.key]}
+                onChange={e => setAccountForm({ ...accountForm, [field.key]: e.target.value })}
+                placeholder={field.placeholder}
+                type={field.type || 'text'}
+                className="input"
+                dir="ltr"
+              />
+            </div>
+          ))}
+        </div>
+      </Modal>
+
+      <Modal
+        open={editAccountModal && isAdmin}
+        onClose={() => {
+          setEditAccountModal(false)
+          setEditAccountStudent(null)
+        }}
+        title={editAccountStudent ? `${editAccountCopy.title}: ${editAccountStudent.name}` : editAccountCopy.title}
+        footer={
+          <div className="flex gap-2.5">
+            <button
+              onClick={() => {
+                setEditAccountModal(false)
+                setEditAccountStudent(null)
+              }}
+              className="btn-ghost flex-1 py-2.5 text-[13px] rounded-xl"
+            >
+              {copy.cancel}
+            </button>
+            <button
+              onClick={handleUpdateAccount}
+              disabled={editAccountSaving || !editAccountForm.email}
+              className="btn-primary flex-1 py-2.5 text-[13px] rounded-xl"
+            >
+              {editAccountSaving ? editAccountCopy.loading : editAccountCopy.action}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div
+            className="rounded-xl px-3 py-2.5 text-[12px]"
+            style={{ background: 'rgba(59,130,246,0.10)', border: '1px solid rgba(59,130,246,0.22)', color: 'var(--text-muted)' }}
+          >
+            {editAccountCopy.hint}
+          </div>
+          {editAccountFields.map(field => (
+            <div key={field.key} className="space-y-1.5">
+              <label className="text-[12px] font-semibold" style={{ color: 'var(--text-muted)' }}>{field.label}</label>
+              <input
+                value={editAccountForm[field.key]}
+                onChange={e => setEditAccountForm({ ...editAccountForm, [field.key]: e.target.value })}
+                placeholder={field.placeholder}
+                type={field.type || 'text'}
+                className="input"
+                dir="ltr"
+              />
+            </div>
+          ))}
         </div>
       </Modal>
 
@@ -410,7 +634,7 @@ export default function Students() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {[
           { label: copy.totalStudents, value: summary.total, color: '#a78bfa' },
           { label: copy.active, value: summary.active, color: '#10b981' },
@@ -465,7 +689,8 @@ export default function Students() {
           )}
         </div>
 
-        <table className="w-full">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[920px]">
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
               {[copy.student, copy.subjects, copy.gpa, copy.attendanceLabel, copy.status, copy.risk, ''].map(header => (
@@ -525,9 +750,19 @@ export default function Students() {
                     <span className={`badge ${student.status === 'Active' ? 'badge-success' : student.status === 'On Leave' ? 'badge-warning' : 'badge-error'}`}>{student.status === 'Active' ? copy.active : student.status === 'On Leave' ? copy.onLeave : copy.suspended}</span>
                   </td>
                   <td className="px-5 py-4">
-                    <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ color: tone.color, background: tone.bg }}>
-                      {tone.label}
-                    </span>
+                    <div className="space-y-2">
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ color: tone.color, background: tone.bg }}>
+                        {tone.label}
+                      </span>
+                      {student.account ? (
+                        <div className="rounded-lg px-2.5 py-1.5 text-[10px]" style={{ background: 'rgba(59,130,246,0.10)', color: '#93c5fd' }}>
+                          <div className="font-semibold">{accountCopy.accountReady}</div>
+                          <div className="truncate max-w-[140px]" title={student.account.email}>{student.account.email}</div>
+                        </div>
+                      ) : (
+                        <div className="text-[10px]" style={{ color: 'var(--text-faint)' }}>{accountCopy.noAccountYet}</div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-1.5 justify-end">
@@ -537,6 +772,16 @@ export default function Students() {
                       <button onClick={() => navigate(`/students/${student.id}#subjects`)} className="btn-ghost px-3 py-1.5 text-[11px]" style={{ borderRadius: 10 }}>
                         {copy.manageGrades}
                       </button>
+                      {isAdmin && !student.account && (
+                        <button onClick={() => openAccountModal(student)} className="btn-ghost px-3 py-1.5 text-[11px]" style={{ borderRadius: 10 }}>
+                          {accountCopy.createAccount}
+                        </button>
+                      )}
+                      {isAdmin && student.account && (
+                        <button onClick={() => openEditAccountModal(student)} className="btn-ghost px-3 py-1.5 text-[11px]" style={{ borderRadius: 10 }}>
+                          {editAccountCopy.action}
+                        </button>
+                      )}
                       <button onClick={() => handleAnalyze(student.id)} className="btn-ghost px-3 py-1.5 text-[11px]" style={{ borderRadius: 10 }}>
                         {copy.aiSummary}
                       </button>
@@ -563,6 +808,7 @@ export default function Students() {
             })}
           </tbody>
         </table>
+        </div>
       </section>
 
       {error && (

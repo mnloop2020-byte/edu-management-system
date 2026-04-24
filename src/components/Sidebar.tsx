@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/api'
 import { useLocale } from '../hooks/useLocale'
 
 interface Counts { students: number; teachers: number; payments: number }
+type CountKey = keyof Counts
+interface NavItem {
+  path: string
+  label: string
+  icon: ReactNode
+  countKey?: CountKey
+  alert?: boolean
+}
 
-const navItems = [
+const navItems: NavItem[] = [
   {
     path: '/',
     label: 'Dashboard',
@@ -167,15 +176,25 @@ const navItems = [
   },
 ]
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean
+  onClose?: () => void
+}
+
+export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   const location  = useLocation()
   const { user, logout } = useAuth()
   const { text, isRtl } = useLocale()
   const [collapsed, setCollapsed] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const [hovered,   setHovered]   = useState<string | null>(null)
   const [counts,    setCounts]    = useState<Counts>({ students: 0, teachers: 0, payments: 0 })
+  const role = String(user?.role || '').toUpperCase()
+  const myProfileLabel = isRtl ? 'ملفي الدراسي' : 'My Profile'
+  const sidebarCollapsed = !isMobile && collapsed
   const navLabelByPath: Record<string, string> = {
     '/': text.nav.dashboard,
+    '/students/me': myProfileLabel,
     '/students': text.nav.students,
     '/teachers': text.nav.teachers,
     '/calendar': text.nav.calendar,
@@ -191,9 +210,43 @@ export default function Sidebar() {
     '/audit-log': text.nav.auditLog,
   }
 
+  const studentHiddenPaths = new Set([
+    '/students',
+    '/teachers',
+    '/attendance',
+    '/reports',
+    '/teacher-performance',
+    '/gradebook',
+    '/parents',
+    '/audit-log',
+  ])
+
+  const studentProfileItem: NavItem = {
+    path: '/students/me',
+    label: myProfileLabel,
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+    ),
+  }
+
+  const visibleNavItems = role === 'STUDENT'
+    ? [navItems[0], studentProfileItem, ...navItems.filter((item) => !studentHiddenPaths.has(item.path) && item.path !== '/')]
+    : navItems
+
   const initials = user?.name
     ? user.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
     : 'U'
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1023px)')
+    const sync = () => setIsMobile(media.matches)
+    sync()
+    media.addEventListener('change', sync)
+    return () => media.removeEventListener('change', sync)
+  }, [])
 
   useEffect(() => {
     api.get('/dashboard').then(res => {
@@ -207,9 +260,11 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="relative flex flex-col shrink-0 h-full transition-all duration-300 ease-in-out"
+      className={`fixed top-0 ${isRtl ? 'right-0' : 'left-0'} z-50 flex flex-col h-[100dvh] transition-all duration-300 ease-in-out lg:relative lg:z-auto lg:translate-x-0 lg:shrink-0 ${
+        isMobile ? (mobileOpen ? 'translate-x-0' : isRtl ? 'translate-x-full' : '-translate-x-full') : 'translate-x-0'
+      }`}
       style={{
-        width: collapsed ? 64 : 224,
+        width: isMobile ? 260 : sidebarCollapsed ? 64 : 224,
         background: 'var(--surface)',
         borderRight: isRtl ? 'none' : '1px solid var(--border)',
         borderLeft: isRtl ? '1px solid var(--border)' : 'none',
@@ -217,30 +272,47 @@ export default function Sidebar() {
     >
       {/* ── Logo ── */}
       <div
-        className="flex items-center gap-3 px-4 h-14 shrink-0"
+        className="flex items-center justify-between gap-3 px-4 h-14 shrink-0"
         style={{ borderBottom: '1px solid var(--border)' }}
       >
-        <div
-          className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-          style={{
-            background: 'linear-gradient(135deg,#7c3aed,#4f46e5)',
-            boxShadow: '0 4px 14px rgba(124,58,237,0.4)',
-          }}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-          </svg>
-        </div>
-        {!collapsed && (
-          <div className="animate-fade-in overflow-hidden">
-            <p className="text-[14px] font-bold leading-none tracking-tight" style={{ color: 'var(--text)' }}>EduSystem</p>
-            <p className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color: 'var(--text-faint)' }}>{text.nav.management}</p>
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+            style={{
+              background: 'linear-gradient(135deg,#7c3aed,#4f46e5)',
+              boxShadow: '0 4px 14px rgba(124,58,237,0.4)',
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+              <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+            </svg>
           </div>
+          {!sidebarCollapsed && (
+            <div className="animate-fade-in overflow-hidden">
+              <p className="text-[14px] font-bold leading-none tracking-tight" style={{ color: 'var(--text)' }}>EduSystem</p>
+              <p className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color: 'var(--text-faint)' }}>{text.nav.management}</p>
+            </div>
+          )}
+        </div>
+        {isMobile && (
+          <button
+            type="button"
+            onClick={() => onClose?.()}
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+            aria-label="Close menu"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         )}
       </div>
 
       {/* ── Collapse toggle ── */}
+      {!isMobile && (
       <button
         onClick={() => setCollapsed(c => !c)}
         className="absolute -right-3 top-[50px] w-6 h-6 rounded-full flex items-center justify-center z-20 transition-all hover:scale-110"
@@ -257,14 +329,15 @@ export default function Sidebar() {
       >
         <svg
           width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-          style={{ transform: collapsed ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }}
+            style={{ transform: sidebarCollapsed ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }}
         >
           <polyline points="15 18 9 12 15 6"/>
         </svg>
       </button>
+      )}
 
       {/* ── Search (expanded only) ── */}
-      {!collapsed && (
+      {!sidebarCollapsed && (
         <div className="px-3 pt-3 pb-2 animate-fade-in">
           <div
             className="flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer transition-all"
@@ -282,7 +355,7 @@ export default function Sidebar() {
       )}
 
       {/* ── Section label ── */}
-      {!collapsed && (
+      {!sidebarCollapsed && (
         <p className="px-4 pt-1 pb-1 text-[9px] font-bold uppercase tracking-[0.15em]" style={{ color: 'var(--text-faint)' }}>
           {text.nav.navigation}
         </p>
@@ -290,7 +363,7 @@ export default function Sidebar() {
 
       {/* ── Nav Links ── */}
       <nav className="flex-1 px-2 space-y-0.5 overflow-y-auto py-1">
-        {navItems.map(item => {
+        {visibleNavItems.map(item => {
           const isActive = location.pathname === item.path
           const badge    = item.countKey ? counts[item.countKey] : 0
           const isHov    = hovered === item.path
@@ -299,11 +372,14 @@ export default function Sidebar() {
             <div key={item.path} className="relative">
               <Link
                 to={item.path}
+                onClick={() => {
+                  if (isMobile) onClose?.()
+                }}
                 onMouseEnter={() => setHovered(item.path)}
                 onMouseLeave={() => setHovered(null)}
                 className="flex items-center gap-3 px-2.5 py-2.5 rounded-xl transition-all duration-150 relative group"
                 style={{
-                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
                   background: isActive
                     ? 'linear-gradient(135deg, rgba(124,58,237,0.18), rgba(79,70,229,0.12))'
                     : isHov
@@ -337,7 +413,7 @@ export default function Sidebar() {
                 </span>
 
                 {/* Label + badge */}
-                {!collapsed && (
+                {!sidebarCollapsed && (
                   <>
                     <span className="text-[13px] font-medium flex-1 whitespace-nowrap" style={{ color: isActive ? '#e2e0ff' : 'var(--text-muted)' }}>
                       {navLabelByPath[item.path] || item.label}
@@ -358,7 +434,7 @@ export default function Sidebar() {
               </Link>
 
               {/* Tooltip when collapsed */}
-              {collapsed && isHov && (
+              {sidebarCollapsed && isHov && (
                 <div
                   className="absolute top-1/2 -translate-y-1/2 px-3 py-2 rounded-xl text-[12px] font-medium whitespace-nowrap z-50 shadow-2xl pointer-events-none animate-scale-in"
                   style={{
@@ -391,14 +467,14 @@ export default function Sidebar() {
       <div className="px-2 py-3">
         <div
           className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl cursor-pointer transition-all"
-          style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}
+          style={{ justifyContent: sidebarCollapsed ? 'center' : 'flex-start' }}
           onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shrink-0 text-[10px] font-bold text-white select-none" style={{ boxShadow: '0 2px 8px rgba(251,191,36,0.3)' }}>
             {initials}
           </div>
-          {!collapsed && (
+          {!sidebarCollapsed && (
             <>
               <div className="flex-1 min-w-0">
                 <p className="text-[12px] font-semibold leading-none truncate" style={{ color: 'var(--text)' }}>{user?.name || 'User'}</p>

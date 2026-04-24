@@ -32,6 +32,14 @@ interface MetaOffering {
   semester: { id: number; name: string; code: string }
   teacher: { id: number; name: string } | null
 }
+interface TeacherOption {
+  id: number
+  name: string
+}
+interface TeacherProfile {
+  id: number
+  name: string
+}
 interface Submission {
   id: number
   fileUrl: string | null
@@ -152,6 +160,21 @@ function getStatusTone(status: string, copy: ReturnType<typeof getCopy>) {
   return { color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', label: copy.statuses.pending }
 }
 
+function asDateTimeInput(element: EventTarget & HTMLInputElement) {
+  if (element.type !== 'datetime-local') {
+    element.type = 'datetime-local'
+  }
+  if (typeof element.showPicker === 'function') {
+    element.showPicker()
+  }
+}
+
+function asTextInputWhenEmpty(element: EventTarget & HTMLInputElement) {
+  if (!element.value) {
+    element.type = 'text'
+  }
+}
+
 export default function Assignments() {
   const { user } = useAuth()
   const { locale } = useLocale()
@@ -159,6 +182,7 @@ export default function Assignments() {
   const role = user?.role || 'ADMIN'
   const canManage = role === 'ADMIN' || role === 'TEACHER'
   const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [teachers, setTeachers] = useState<TeacherOption[]>([])
   const [offerings, setOfferings] = useState<MetaOffering[]>([])
   const [selected, setSelected] = useState<Assignment | null>(null)
   const [submissions, setSubmissions] = useState<Submission[]>([])
@@ -166,20 +190,32 @@ export default function Assignments() {
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [filter, setFilter] = useState<FilterKey>('all')
-  const [form, setForm] = useState({ title: '', description: '', subjectOfferingId: '', dueAt: '', maxScore: '100', attachmentUrl: '' })
+  const [form, setForm] = useState({ teacherId: '', title: '', description: '', subjectOfferingId: '', dueAt: '', maxScore: '100', attachmentUrl: '' })
   const [submitForm, setSubmitForm] = useState({ fileUrl: '', note: '' })
-  const noSubjectsLabel = locale === 'ar' ? 'لا توجد مواد متاحة' : 'No subjects available'
+  const noSubjectsForTeacherLabel = locale === 'ar' ? 'لا توجد مواد مرتبطة بهذا المعلم' : 'No subjects linked to this teacher'
+  const noTeachersLabel = locale === 'ar' ? 'لا يوجد معلمون متاحون للاختيار' : 'No teachers available'
+  const chooseTeacherLabel = locale === 'ar' ? 'اختر المعلم' : 'Choose teacher'
+  const chooseTeacherFirstLabel = locale === 'ar' ? 'اختر المعلم أولًا' : 'Choose teacher first'
+  const multipleTermsLabel = locale === 'ar' ? 'أكثر من فصل' : 'Multiple terms'
   const teacherLabel = locale === 'ar' ? 'المعلم' : 'Teacher'
   const termLabel = locale === 'ar' ? 'الفصل' : 'Term'
   const teacherMissingLabel = locale === 'ar' ? 'لم يحدد المعلم بعد' : 'Teacher not assigned'
   const linkTeacherFirstLabel = locale === 'ar'
     ? 'اربط هذه المادة بمعلم أولًا قبل إنشاء الواجب'
     : 'Link this subject to a teacher first before creating assignments'
+  const dateTimePlaceholder = locale === 'ar' ? 'اختر التاريخ والوقت' : 'Choose date and time'
+  const teacherOptions = useMemo(() => {
+    return [...teachers].sort((left, right) => left.name.localeCompare(right.name))
+  }, [teachers])
   const subjectOptions = useMemo(() => {
+    const selectedTeacherId = Number(form.teacherId)
+    if (!selectedTeacherId) return []
+
     const seen = new Set<number>()
     const result: MetaOffering[] = []
 
     for (const offering of offerings) {
+      if (!offering.teacher || offering.teacher.id !== selectedTeacherId) continue
       const subjectId = offering.subject.id
       if (seen.has(subjectId)) continue
       seen.add(subjectId)
@@ -187,12 +223,47 @@ export default function Assignments() {
     }
 
     return result
-  }, [offerings])
+  }, [offerings, form.teacherId])
   const selectedOffering = useMemo(
     () => offerings.find((item) => item.id === Number(form.subjectOfferingId)) || null,
     [offerings, form.subjectOfferingId],
   )
+  const selectedTeacher = useMemo(
+    () => teacherOptions.find((item) => String(item.id) === form.teacherId) || null,
+    [teacherOptions, form.teacherId],
+  )
+  const selectedTeacherTerm = useMemo(() => {
+    if (!form.teacherId) return null
+
+    const terms = new Set(
+      offerings
+        .filter((item) => item.teacher && String(item.teacher.id) === form.teacherId)
+        .map((item) => `${item.semester.name} - ${item.section}`),
+    )
+
+    if (terms.size === 0) return null
+    if (terms.size === 1) return [...terms][0]
+    return multipleTermsLabel
+  }, [offerings, form.teacherId, multipleTermsLabel])
   const createBlockedByTeacher = canManage && role !== 'TEACHER' && !!selectedOffering && !selectedOffering.teacher
+
+  function buildTeacherOptions(profileTeachers: TeacherProfile[], nextOfferings: MetaOffering[]) {
+    const teacherById = new Map<number, TeacherOption>()
+
+    for (const teacher of profileTeachers) {
+      if (!teacher?.id || !teacher?.name) continue
+      teacherById.set(Number(teacher.id), { id: Number(teacher.id), name: teacher.name })
+    }
+
+    for (const offering of nextOfferings) {
+      if (!offering?.teacher?.id || !offering?.teacher?.name) continue
+      if (!teacherById.has(offering.teacher.id)) {
+        teacherById.set(offering.teacher.id, { id: offering.teacher.id, name: offering.teacher.name })
+      }
+    }
+
+    return [...teacherById.values()]
+  }
 
   useEffect(() => {
     let active = true
@@ -200,13 +271,9 @@ export default function Assignments() {
       try {
         setLoading(true)
         const endpoint = role === 'STUDENT' ? '/assignments/my' : '/assignments'
-        const [assignmentsRes, offeringsRes] = await Promise.all([
-          api.get(endpoint),
-          canManage ? api.get('/academic/offerings') : Promise.resolve(null),
-        ])
+        const assignmentsRes = await api.get(endpoint)
         if (!active) return
-        setAssignments(assignmentsRes.data.assignments)
-        if (offeringsRes) setOfferings(offeringsRes.data.offerings ?? [])
+        setAssignments(assignmentsRes.data.assignments ?? [])
       } catch {
         if (active) toast.error(copy.loadError)
       } finally {
@@ -214,19 +281,58 @@ export default function Assignments() {
       }
     })()
     return () => { active = false }
-  }, [role, canManage, copy.loadError])
+  }, [role, copy.loadError])
+
+  useEffect(() => {
+    if (!canManage) return
+    if (!showCreate && teachers.length > 0 && offerings.length > 0) return
+
+    let active = true
+    ;(async () => {
+      const [offeringsResult, teachersResult] = await Promise.allSettled([
+        api.get('/academic/offerings'),
+        api.get('/teachers'),
+      ])
+      if (!active) return
+
+      const nextOfferings = offeringsResult.status === 'fulfilled' ? (offeringsResult.value?.data?.offerings ?? []) : []
+      const profileTeachers = teachersResult.status === 'fulfilled' ? (teachersResult.value?.data?.teachers ?? []) : []
+
+      setOfferings(nextOfferings)
+      setTeachers(buildTeacherOptions(profileTeachers, nextOfferings))
+    })()
+
+    return () => { active = false }
+  }, [canManage, showCreate, teachers.length, offerings.length])
 
   useEffect(() => {
     if (!showCreate) return
 
     setForm((current) => {
-      const allowedIds = new Set(subjectOptions.map((item) => String(item.id)))
-      if (current.subjectOfferingId && allowedIds.has(current.subjectOfferingId)) {
+      const allowedTeacherIds = new Set(teacherOptions.map((item) => String(item.id)))
+      if (!current.teacherId || allowedTeacherIds.has(current.teacherId)) {
         return current
       }
 
-      const first = subjectOptions[0]
-      return { ...current, subjectOfferingId: first ? String(first.id) : '' }
+      return { ...current, teacherId: '', subjectOfferingId: '' }
+    })
+  }, [showCreate, teacherOptions])
+
+  useEffect(() => {
+    if (!showCreate) return
+
+    setForm((current) => {
+      if (!current.teacherId) {
+        if (!current.subjectOfferingId) return current
+        return { ...current, subjectOfferingId: '' }
+      }
+
+      const allowedSubjectIds = new Set(subjectOptions.map((item) => String(item.id)))
+      if (!current.subjectOfferingId || allowedSubjectIds.has(current.subjectOfferingId)) {
+        return current
+      }
+
+      return { ...current, subjectOfferingId: '' }
     })
   }, [showCreate, subjectOptions])
 
@@ -251,20 +357,40 @@ export default function Assignments() {
   }
 
   async function createAssignment() {
+    if (!form.teacherId) {
+      toast.error(chooseTeacherFirstLabel)
+      return
+    }
+
     if (!form.subjectOfferingId) {
       toast.error(copy.chooseSubject)
       return
     }
 
     try {
-      await api.post('/assignments', { ...form, subjectOfferingId: Number(form.subjectOfferingId), maxScore: Number(form.maxScore) })
+      await api.post('/assignments', {
+        ...form,
+        teacherId: Number(form.teacherId),
+        subjectOfferingId: Number(form.subjectOfferingId),
+        maxScore: Number(form.maxScore),
+      })
       setShowCreate(false)
-      setForm({ title: '', description: '', subjectOfferingId: '', dueAt: '', maxScore: '100', attachmentUrl: '' })
+      setForm({ teacherId: '', title: '', description: '', subjectOfferingId: '', dueAt: '', maxScore: '100', attachmentUrl: '' })
       await reloadAssignments()
       toast.success(copy.createSuccess)
     } catch (error) {
       toast.error(isAxiosError(error) ? error.response?.data?.message || copy.createError : copy.createError)
     }
+  }
+
+  function handleTeacherChange(nextTeacherId: string) {
+    setForm((current) => ({
+      ...current,
+      teacherId: nextTeacherId,
+      subjectOfferingId: '',
+      title: '',
+      description: '',
+    }))
   }
 
   async function submitAssignment() {
@@ -303,16 +429,53 @@ export default function Assignments() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={copy.createAssignment} footer={<div className="flex gap-2.5"><button onClick={() => setShowCreate(false)} className="btn-ghost flex-1 py-2.5 text-[13px] rounded-xl">{copy.cancel}</button><button onClick={createAssignment} disabled={createBlockedByTeacher || !form.subjectOfferingId} className="btn-primary flex-1 py-2.5 text-[13px] rounded-xl">{copy.create}</button></div>}>
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={copy.createAssignment} footer={<div className="flex gap-2.5"><button onClick={() => setShowCreate(false)} className="btn-ghost flex-1 py-2.5 text-[13px] rounded-xl">{copy.cancel}</button><button onClick={createAssignment} disabled={createBlockedByTeacher || !form.teacherId || !form.subjectOfferingId} className="btn-primary flex-1 py-2.5 text-[13px] rounded-xl">{copy.create}</button></div>}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <select className="input md:col-span-2" value={form.subjectOfferingId} onChange={e => setForm({ ...form, subjectOfferingId: e.target.value })}>
-            <option value="">{copy.chooseSubject}</option>
+          <select className="input md:col-span-2" value={form.teacherId} onChange={e => handleTeacherChange(e.target.value)}>
+            <option value="">{chooseTeacherLabel}</option>
+            {teacherOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+          {teacherOptions.length > 0 && (
+            <div className="md:col-span-2 flex flex-wrap gap-2">
+              {teacherOptions.map((item) => {
+                const isActive = form.teacherId === String(item.id)
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleTeacherChange(String(item.id))}
+                    className="px-3 py-1.5 rounded-lg text-[12px] transition-all"
+                    style={{
+                      background: isActive ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${isActive ? 'rgba(124,58,237,0.35)' : 'var(--border)'}`,
+                      color: isActive ? '#a78bfa' : 'var(--text-muted)',
+                    }}
+                  >
+                    {item.name}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          <select className="input md:col-span-2" value={form.subjectOfferingId} disabled={!form.teacherId} onChange={e => setForm({ ...form, subjectOfferingId: e.target.value })}>
+            <option value="">{form.teacherId ? copy.chooseSubject : chooseTeacherFirstLabel}</option>
             {subjectOptions.map(item => <option key={item.id} value={item.id}>{item.subject.name}</option>)}
           </select>
           <input className="input md:col-span-2" placeholder={copy.title} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
-          {subjectOptions.length === 0 && (
+          {teacherOptions.length === 0 && (
             <div className="md:col-span-2 rounded-xl px-3.5 py-3 text-[12px]" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.18)', color: '#fbbf24' }}>
-              {noSubjectsLabel}
+              {noTeachersLabel}
+            </div>
+          )}
+          {form.teacherId && subjectOptions.length === 0 && (
+            <div className="md:col-span-2 rounded-xl px-3.5 py-3 text-[12px]" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.18)', color: '#fbbf24' }}>
+              {noSubjectsForTeacherLabel}
+            </div>
+          )}
+          {selectedTeacher && !selectedOffering && (
+            <div className="md:col-span-2 rounded-xl px-3.5 py-3 text-[12px] space-y-1.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+              <p>{teacherLabel}: {selectedTeacher.name}</p>
+              {selectedTeacherTerm && <p>{termLabel}: {selectedTeacherTerm}</p>}
             </div>
           )}
           {selectedOffering && (
@@ -323,7 +486,17 @@ export default function Assignments() {
             </div>
           )}
           <input className="input md:col-span-2" placeholder={copy.description} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-          <input className="input" type="datetime-local" value={form.dueAt} onChange={e => setForm({ ...form, dueAt: e.target.value })} />
+          <input
+            className="input"
+            type={form.dueAt ? 'datetime-local' : 'text'}
+            lang="en-GB"
+            placeholder={dateTimePlaceholder}
+            title={dateTimePlaceholder}
+            value={form.dueAt}
+            onFocus={e => asDateTimeInput(e.currentTarget)}
+            onBlur={e => asTextInputWhenEmpty(e.currentTarget)}
+            onChange={e => setForm({ ...form, dueAt: e.target.value })}
+          />
           <input className="input" type="number" value={form.maxScore} onChange={e => setForm({ ...form, maxScore: e.target.value })} />
           <input className="input md:col-span-2" placeholder={copy.attachment} value={form.attachmentUrl} onChange={e => setForm({ ...form, attachmentUrl: e.target.value })} />
         </div>
@@ -370,30 +543,34 @@ export default function Assignments() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 xl:grid-cols-5 gap-4">
-        {[
-          { label: copy.total, value: summary.total, color: '#a78bfa' },
-          { label: copy.pending, value: summary.pending, color: '#fbbf24' },
-          { label: copy.submitted, value: summary.submitted, color: '#60a5fa' },
-          { label: copy.late, value: summary.late, color: '#f87171' },
-          { label: copy.graded, value: summary.graded, color: '#10b981' },
-        ].map(item => (
-          <div key={item.label} className="card p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{item.label}</p>
-            <p className="text-[24px] font-extrabold mt-2" style={{ color: item.color }}>{item.value}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="card p-4">
-        <div className="flex gap-2 flex-wrap">
-          {FILTERS.map(item => (
-            <button key={item} onClick={() => setFilter(item)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium capitalize" style={{ background: filter === item ? 'rgba(124,58,237,0.16)' : 'transparent', color: filter === item ? '#a78bfa' : 'var(--text-muted)', border: `1px solid ${filter === item ? 'rgba(124,58,237,0.32)' : 'var(--border)'}` }}>
-              {copy.filters[item]}
-            </button>
+      {summary.total > 0 && (
+        <section className="grid grid-cols-2 xl:grid-cols-5 gap-4">
+          {[
+            { label: copy.total, value: summary.total, color: '#a78bfa' },
+            { label: copy.pending, value: summary.pending, color: '#fbbf24' },
+            { label: copy.submitted, value: summary.submitted, color: '#60a5fa' },
+            { label: copy.late, value: summary.late, color: '#f87171' },
+            { label: copy.graded, value: summary.graded, color: '#10b981' },
+          ].map(item => (
+            <div key={item.label} className="card p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{item.label}</p>
+              <p className="text-[24px] font-extrabold mt-2" style={{ color: item.color }}>{item.value}</p>
+            </div>
           ))}
-        </div>
-      </section>
+        </section>
+      )}
+
+      {summary.total > 0 && (
+        <section className="card p-4">
+          <div className="flex gap-2 flex-wrap">
+            {FILTERS.map(item => (
+              <button key={item} onClick={() => setFilter(item)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium capitalize" style={{ background: filter === item ? 'rgba(124,58,237,0.16)' : 'transparent', color: filter === item ? '#a78bfa' : 'var(--text-muted)', border: `1px solid ${filter === item ? 'rgba(124,58,237,0.32)' : 'var(--border)'}` }}>
+                {copy.filters[item]}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <div className="card p-8 text-[13px]" style={{ color: 'var(--text-muted)' }}>{copy.loading}</div>

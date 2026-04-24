@@ -151,8 +151,16 @@ function buildWeightSummary(offering: OfferingRecord | null, locale: 'ar' | 'en'
 }
 
 function toNumericInput(value: string) {
-  if (value.trim() === '') return null
-  const numeric = Number(value)
+  const normalized = String(value || '')
+    .replace(/[\u0660-\u0669]/g, (digit) => String(digit.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, (digit) => String(digit.charCodeAt(0) - 0x06f0))
+    .replace(/\u066B/g, '.')
+    .replace(/\u066C/g, '')
+    .trim()
+
+  if (normalized === '') return null
+
+  const numeric = Number(normalized)
   return Number.isFinite(numeric) ? numeric : null
 }
 
@@ -355,6 +363,13 @@ function getCopy(locale: 'ar' | 'en') {
       }
 }
 
+function normalizeAiSummary(value: string | null | undefined) {
+  return String(value || '')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export default function StudentProfile() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -377,6 +392,7 @@ export default function StudentProfile() {
   const [subjectSavingId, setSubjectSavingId] = useState<number | null>(null)
   const [scoreDrafts, setScoreDrafts] = useState<Record<number, ScoreDraft>>({})
   const [loading, setLoading] = useState(true)
+  const [profileErrorMessage, setProfileErrorMessage] = useState('')
   const canManageAcademic = user?.role === 'ADMIN' || user?.role === 'TEACHER'
   const canEnrollSubjects = user?.role === 'ADMIN'
   const manageAcademicLabel = locale === 'ar' ? 'إدارة المواد والدرجات' : 'Manage Academics'
@@ -409,16 +425,26 @@ export default function StudentProfile() {
   const syncAcademicSuccessLabel = locale === 'ar' ? 'تمت مزامنة البيانات الأكاديمية' : 'Academic data synced successfully'
   const syncAcademicErrorLabel = locale === 'ar' ? 'فشلت مزامنة البيانات الأكاديمية' : 'Failed to sync academic data'
 
+  const normalizedAiSummary = useMemo(() => normalizeAiSummary(aiSummary), [aiSummary])
+  const isSelfProfileRoute = location.pathname.toLowerCase().endsWith('/students/me')
+  const isSelfProfile = isSelfProfileRoute || id === 'me' || (user?.role === 'STUDENT' && !id)
+  const studentEndpoint = isSelfProfile ? '/students/me' : `/students/${id}`
+  const goalStorageKey = isSelfProfile ? `student-goal-me-${user?.id ?? 'unknown'}` : `student-goal-${id}`
+
   const loadStudentData = async () => {
-    const [studentRes, statsRes, aiRes] = await Promise.all([
-      api.get(`/students/${id}`),
-      api.get(`/attendance/student/${id}/stats`),
-      api.get(`/ai/analyze/${id}`).catch(() => ({ data: { analysis: '' } })),
+    const studentRes = await api.get(studentEndpoint)
+    const resolvedStudentId = Number(studentRes.data?.student?.id)
+    if (!Number.isFinite(resolvedStudentId) || resolvedStudentId <= 0) {
+      throw new Error('Invalid student profile response')
+    }
+    const [statsRes, aiRes] = await Promise.all([
+      api.get(`/attendance/student/${resolvedStudentId}/stats`),
+      api.get(`/ai/analyze/${resolvedStudentId}`).catch(() => ({ data: { analysis: '' } })),
     ])
 
     setStudent(studentRes.data.student)
     setStats(statsRes.data)
-    setAiSummary((aiRes.data as AnalysisData).analysis || '')
+    setAiSummary(normalizeAiSummary((aiRes.data as AnalysisData).analysis || ''))
   }
 
   useEffect(() => {
@@ -427,33 +453,44 @@ export default function StudentProfile() {
     ;(async () => {
       try {
         setLoading(true)
-        const [studentRes, statsRes, aiRes] = await Promise.all([
-          api.get(`/students/${id}`),
-          api.get(`/attendance/student/${id}/stats`),
-          api.get(`/ai/analyze/${id}`).catch(() => ({ data: { analysis: '' } })),
+        setProfileErrorMessage('')
+        const studentRes = await api.get(studentEndpoint)
+        const resolvedStudentId = Number(studentRes.data?.student?.id)
+        if (!Number.isFinite(resolvedStudentId) || resolvedStudentId <= 0) {
+          throw new Error('Invalid student profile response')
+        }
+        const [statsRes, aiRes] = await Promise.all([
+          api.get(`/attendance/student/${resolvedStudentId}/stats`),
+          api.get(`/ai/analyze/${resolvedStudentId}`).catch(() => ({ data: { analysis: '' } })),
         ])
         if (!active) return
         setStudent(studentRes.data.student)
         setStats(statsRes.data)
-        setAiSummary((aiRes.data as AnalysisData).analysis || '')
+        setAiSummary(normalizeAiSummary((aiRes.data as AnalysisData).analysis || ''))
+      } catch (err: any) {
+        if (!active) return
+        setStudent(null)
+        setStats(null)
+        setAiSummary('')
+        setProfileErrorMessage(err?.response?.data?.message || copy.notFoundMessage)
       } finally {
         if (active) setLoading(false)
       }
     })()
 
     return () => { active = false }
-  }, [id])
+  }, [studentEndpoint, copy.notFoundMessage])
 
   useEffect(() => {
     if (!id) return
-    const saved = window.localStorage.getItem(`student-goal-${id}`)
+    const saved = window.localStorage.getItem(goalStorageKey)
     if (saved) setGoal(JSON.parse(saved) as GoalState)
-  }, [id])
+  }, [id, goalStorageKey])
 
   useEffect(() => {
     if (!id) return
-    window.localStorage.setItem(`student-goal-${id}`, JSON.stringify(goal))
-  }, [goal, id])
+    window.localStorage.setItem(goalStorageKey, JSON.stringify(goal))
+  }, [goal, id, goalStorageKey])
 
   useEffect(() => {
     if (!student) return
@@ -607,7 +644,7 @@ export default function StudentProfile() {
     const draft = scoreDrafts[subject.id]
     if (!draft) return
 
-    const toPayload = (value: string) => value.trim() === '' ? null : Number(value)
+    const toPayload = (value: string) => toNumericInput(value)
 
     try {
       setSubjectSavingId(subject.id)
@@ -645,7 +682,15 @@ export default function StudentProfile() {
   }
 
   if (!student || !stats) {
-    return <div className="card"><EmptyState title={copy.notFound} message={copy.notFoundMessage} action={{ label: copy.backToStudents, onClick: () => navigate('/students') }} /></div>
+    return (
+      <div className="card">
+        <EmptyState
+          title={copy.notFound}
+          message={profileErrorMessage || copy.notFoundMessage}
+          action={{ label: isSelfProfile ? copy.back : copy.backToStudents, onClick: () => navigate(isSelfProfile ? '/' : '/students') }}
+        />
+      </div>
+    )
   }
 
   const tone = getIndicatorStyle(stats.indicator, locale)
@@ -898,7 +943,7 @@ export default function StudentProfile() {
             <span className="px-3 py-1.5 rounded-full text-[11px] font-semibold" style={{ color: tone.color, background: tone.bg }}>{tone.label}</span>
             {user?.role === 'ADMIN' && <button onClick={() => void handleSyncAcademicData()} disabled={syncLoading} className="btn-ghost px-3 py-1.5 text-[12px]">{syncLoading ? workingLabel : syncAcademicLabel}</button>}
             {canEnrollSubjects && <button onClick={() => setManagementOpen(true)} className="btn-ghost px-3 py-1.5 text-[12px]">{manageAcademicLabel}</button>}
-            <button onClick={() => navigate('/students')} className="btn-ghost px-3 py-1.5 text-[12px]">{copy.back}</button>
+            <button onClick={() => navigate(isSelfProfile ? '/' : '/students')} className="btn-ghost px-3 py-1.5 text-[12px]">{copy.back}</button>
           </div>
         </div>
       </section>
@@ -920,30 +965,30 @@ export default function StudentProfile() {
 
       {subjectsSection}
 
-      <section className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-4">
-        <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
+      <section className="space-y-4">
+        <div className="card p-4 self-start">
+          <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.attendanceProgress}</h3>
               <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{copy.attendanceSubtitle}</p>
             </div>
             <span className="text-[12px] font-semibold" style={{ color: tone.color }}>{stats.indicatorLabel}</span>
           </div>
-          <div className="rounded-2xl p-4 mb-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}>
-            <div className="flex items-center justify-between mb-2">
+          <div className="rounded-2xl p-3.5 mb-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between mb-1.5">
               <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{copy.semesterAttendance}</span>
               <span className="text-[12px] font-semibold" style={{ color: 'var(--text)' }}>{stats.attendancePercentage}%</span>
             </div>
-            <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
               <div className="h-full rounded-full" style={{ width: `${stats.attendancePercentage}%`, background: tone.color }} />
             </div>
-            <div className="flex items-center justify-between mt-2 text-[11px]" style={{ color: 'var(--text-faint)' }}>
+            <div className="flex items-center justify-between mt-1.5 text-[11px]" style={{ color: 'var(--text-faint)' }}>
               <span>{stats.presentCount} {copy.present}</span>
               <span>{stats.lateCount} {copy.late}</span>
               <span>{stats.absentCount} {copy.absent}</span>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={140}>
             <AreaChart data={attendanceTrend}>
               <defs>
                 <linearGradient id="studentAttendanceGrad" x1="0" y1="0" x2="0" y2="1">
@@ -960,8 +1005,7 @@ export default function StudentProfile() {
           </ResponsiveContainer>
         </div>
 
-        <div className="space-y-4">
-          <div className="card p-5">
+        <div className="card p-5">
             <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.academicSummary}</h3>
             <p className="text-[11px] mt-1 mb-4" style={{ color: 'var(--text-muted)' }}>{copy.academicSubtitle}</p>
             <div className="grid grid-cols-2 gap-3">
@@ -977,9 +1021,9 @@ export default function StudentProfile() {
                 </div>
               ))}
             </div>
-          </div>
+        </div>
 
-          <div className="card p-5">
+        <div className="card p-5">
             <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.goalTracking}</h3>
             <p className="text-[11px] mt-1 mb-4" style={{ color: 'var(--text-muted)' }}>{copy.goalSubtitle}</p>
             <div className="space-y-3">
@@ -995,17 +1039,17 @@ export default function StudentProfile() {
               </div>
               <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{goalProgress}% {copy.ofTarget}</p>
             </div>
-          </div>
+        </div>
 
-          <div className="card p-5">
+        <div className="card p-5">
             <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.aiSummary}</h3>
             <p className="text-[11px] mt-1 mb-3" style={{ color: 'var(--text-muted)' }}>{copy.aiSubtitle}</p>
-            <div className="rounded-2xl p-4 text-[13px] leading-7 whitespace-pre-wrap" dir="rtl" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.16)', color: 'var(--text)', textAlign: 'right' }}>
-              {aiSummary || copy.noAiSummary}
+            <div className="rounded-2xl p-4 text-[13px] leading-7 whitespace-pre-wrap max-h-[240px] overflow-y-auto" dir="rtl" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.16)', color: 'var(--text)', textAlign: 'right' }}>
+              {normalizedAiSummary || copy.noAiSummary}
             </div>
-          </div>
+        </div>
 
-          <div className="card p-5">
+        <div className="card p-5">
             <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.assignmentSnapshot}</h3>
             <p className="text-[11px] mt-1 mb-3" style={{ color: 'var(--text-muted)' }}>{copy.assignmentSubtitle}</p>
             <div className="space-y-2.5">
@@ -1026,9 +1070,9 @@ export default function StudentProfile() {
                 </div>
               ))}
             </div>
-          </div>
+        </div>
 
-          <div className="card p-5">
+        <div className="card p-5">
             <h3 className="text-[14px] font-bold" style={{ color: 'var(--text)' }}>{copy.riskAnalysis}</h3>
             <p className="text-[11px] mt-1 mb-3" style={{ color: 'var(--text-muted)' }}>{copy.riskSubtitle}</p>
             <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}>
@@ -1041,7 +1085,6 @@ export default function StudentProfile() {
                 {copy.primaryReason}: {riskReason}
               </p>
             </div>
-          </div>
         </div>
       </section>
 

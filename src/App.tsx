@@ -50,6 +50,52 @@ interface NotificationItem {
   createdAt: string
 }
 
+function localizeNotificationStatus(value: string, locale: 'ar' | 'en') {
+  if (locale !== 'ar') return value
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'present') return 'حاضر'
+  if (normalized === 'late') return 'متأخر'
+  if (normalized === 'absent') return 'غائب'
+  return value
+}
+
+function localizeNotificationText(value: string, locale: 'ar' | 'en') {
+  const raw = String(value || '').trim()
+  if (!raw || locale !== 'ar') return raw
+
+  let result = raw
+  result = result.replace(/^Attendance dropped this week$/i, 'انخفض الحضور هذا الأسبوع')
+  result = result.replace(/^Enrollment slowed this month$/i, 'انخفض التسجيل هذا الشهر')
+  result = result.replace(/^Open payments to review overdue balances$/i, 'افتح المدفوعات لمراجعة المبالغ المتأخرة')
+  result = result.replace(/^Review daily attendance trends and at-risk students$/i, 'راجع اتجاهات الحضور اليومية والطلاب المعرضين للخطر')
+  result = result.replace(/^Student registrations are down compared with last month$/i, 'تسجيلات الطلاب أقل مقارنة بالشهر الماضي')
+  result = result.replace(
+    /^(.+) is over the absence limit$/i,
+    (_, name) => `${name} تجاوز حد الغياب`,
+  )
+  result = result.replace(
+    /^(.+) is near the absence limit$/i,
+    (_, name) => `${name} قريب من حد الغياب`,
+  )
+  result = result.replace(
+    /^(\d+) absences recorded this semester$/i,
+    (_, count) => `تم تسجيل ${count} حالات غياب هذا الفصل`,
+  )
+  result = result.replace(
+    /^(\d+) overdue payments need follow-up$/i,
+    (_, count) => `يوجد ${count} مدفوعات متأخرة تحتاج متابعة`,
+  )
+  result = result.replace(
+    /^(.+) marked (.+)$/i,
+    (_, name, status) => `${name} تم تسجيله ${localizeNotificationStatus(status, locale)}`,
+  )
+  result = result.replace(
+    /^(.+) paid ([\d.,]+) SAR$/i,
+    (_, name, amount) => `${name} دفع ${amount} ر.س`,
+  )
+  return result
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, isLoading } = useAuth()
   if (isLoading) {
@@ -68,6 +114,17 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
   if (!token) return <Navigate to="/landing" replace />
+  return <>{children}</>
+}
+
+function RoleRoute({ allowed, children }: { allowed: string[]; children: React.ReactNode }) {
+  const { user } = useAuth()
+  const role = String(user?.role || '').toUpperCase()
+
+  if (!role || !allowed.includes(role)) {
+    return <Navigate to="/" replace />
+  }
+
   return <>{children}</>
 }
 
@@ -104,11 +161,13 @@ function RouteFallback() {
   )
 }
 
-function TopBar() {
+function TopBar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuth()
-  const { text, toggleLocale, isRtl } = useLocale()
+  const { text, isRtl } = useLocale()
+  const role = String(user?.role || '').toUpperCase()
+  const isStudent = role === 'STUDENT'
   const [search, setSearch] = useState('')
   const [results, setResults] = useState<SearchResults>({ students: [], teachers: [], payments: [], assignments: [], reports: [] })
   const [searchOpen, setSearchOpen] = useState(false)
@@ -202,26 +261,41 @@ function TopBar() {
     { key: 'reports', label: text.nav.reports, items: visibleResults.reports, path: '/reports' },
   ] as const
 
-  const commandGroups = [
-    {
-      label: text.commands.actions,
-      items: [
-        { id: 'action-student', title: text.commands.addStudent, subtitle: text.commands.openStudentWorkspace, path: '/students' },
-        { id: 'action-attendance', title: text.commands.takeAttendance, subtitle: text.commands.openAttendanceDesk, path: '/attendance' },
-        { id: 'action-assignment', title: text.commands.createAssignment, subtitle: text.commands.openAssignmentsWorkspace, path: '/assignments' },
-        { id: 'action-report', title: text.commands.openReports, subtitle: text.commands.viewAnalyticsAndExports, path: '/reports' },
-      ],
-    },
-    {
-      label: text.commands.navigate,
-      items: [
-        { id: 'nav-dashboard', title: text.nav.dashboard, subtitle: text.commands.institutionOverview, path: '/' },
-        { id: 'nav-students', title: text.nav.students, subtitle: text.commands.studentsWorkspace, path: '/students' },
-        { id: 'nav-payments', title: text.nav.payments, subtitle: text.commands.revenueDesk, path: '/payments' },
-        { id: 'nav-calendar', title: text.nav.calendar, subtitle: text.commands.deadlinesAndEvents, path: '/calendar' },
-      ],
-    },
-  ]
+  const commandGroups = isStudent
+    ? [
+        {
+          label: text.commands.navigate,
+          items: [
+            { id: 'nav-dashboard', title: text.nav.dashboard, subtitle: text.commands.institutionOverview, path: '/' },
+            { id: 'nav-profile', title: isRtl ? 'ملفي الدراسي' : 'My Profile', subtitle: text.pages['/students/profile'].subtitle, path: '/students/me' },
+            { id: 'nav-transcripts', title: text.nav.transcripts, subtitle: text.pages['/transcripts'].subtitle, path: '/transcripts' },
+            { id: 'nav-assignments', title: text.nav.assignments, subtitle: text.commands.openAssignmentsWorkspace, path: '/assignments' },
+            { id: 'nav-calendar', title: text.nav.calendar, subtitle: text.commands.deadlinesAndEvents, path: '/calendar' },
+            { id: 'nav-payments', title: text.nav.payments, subtitle: text.commands.revenueDesk, path: '/payments' },
+            { id: 'nav-communications', title: text.nav.communications, subtitle: text.pages['/communications'].subtitle, path: '/communications' },
+          ],
+        },
+      ]
+    : [
+        {
+          label: text.commands.actions,
+          items: [
+            { id: 'action-student', title: text.commands.addStudent, subtitle: text.commands.openStudentWorkspace, path: '/students' },
+            { id: 'action-attendance', title: text.commands.takeAttendance, subtitle: text.commands.openAttendanceDesk, path: '/attendance' },
+            { id: 'action-assignment', title: text.commands.createAssignment, subtitle: text.commands.openAssignmentsWorkspace, path: '/assignments' },
+            { id: 'action-report', title: text.commands.openReports, subtitle: text.commands.viewAnalyticsAndExports, path: '/reports' },
+          ],
+        },
+        {
+          label: text.commands.navigate,
+          items: [
+            { id: 'nav-dashboard', title: text.nav.dashboard, subtitle: text.commands.institutionOverview, path: '/' },
+            { id: 'nav-students', title: text.nav.students, subtitle: text.commands.studentsWorkspace, path: '/students' },
+            { id: 'nav-payments', title: text.nav.payments, subtitle: text.commands.revenueDesk, path: '/payments' },
+            { id: 'nav-calendar', title: text.nav.calendar, subtitle: text.commands.deadlinesAndEvents, path: '/calendar' },
+          ],
+        },
+      ]
 
   const paletteResults = [
     ...commandGroups.map(group => ({
@@ -238,7 +312,7 @@ function TopBar() {
         id: `${group.key}-${item.id}`,
         title: item.title,
         subtitle: item.subtitle,
-        path: group.key === 'students' ? `/students/${item.id}` : group.path,
+        path: group.key === 'students' ? (isStudent ? '/students/me' : `/students/${item.id}`) : group.path,
       })),
     })),
   ].filter(group => group.items.length > 0)
@@ -298,17 +372,32 @@ function TopBar() {
       )}
 
       <header
-        className="h-14 flex items-center justify-between px-6 shrink-0 gap-4"
+        className="h-14 flex items-center justify-between px-3 sm:px-4 lg:px-6 shrink-0 gap-3"
         style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}
       >
       {/* Page Title */}
-      <div className="animate-fade-in">
-        <h1 className="text-[15px] font-bold leading-none" style={{ color: 'var(--text)' }}>{meta.title}</h1>
-        <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-faint)' }}>{meta.subtitle}</p>
+      <div className="animate-fade-in flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={onOpenSidebar}
+          className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center"
+          style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+          aria-label="Open menu"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <div className="min-w-0">
+          <h1 className="text-[14px] sm:text-[15px] font-bold leading-none truncate" style={{ color: 'var(--text)' }}>{meta.title}</h1>
+          <p className="hidden sm:block text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-faint)' }}>{meta.subtitle}</p>
+        </div>
       </div>
 
       {/* Right controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Search */}
         <div
           ref={searchRef}
@@ -336,7 +425,7 @@ function TopBar() {
           <kbd className="text-[9px] border rounded px-1 py-0.5" style={{ color: 'var(--text-faint)', borderColor: 'var(--border)' }}>Ctrl+K</kbd>
           {searchOpen && search.trim() && (
             <div
-              className="absolute top-11 right-0 w-[340px] rounded-xl p-2 shadow-2xl z-50"
+              className="absolute top-11 right-0 w-[min(92vw,340px)] rounded-xl p-2 shadow-2xl z-50"
               style={{ background: 'var(--surface-2, #1C1F27)', border: '1px solid var(--border)' }}
             >
               {resultGroups.every(group => group.items.length === 0) ? (
@@ -348,7 +437,7 @@ function TopBar() {
                     {group.items.map(item => (
                       <button
                         key={`${group.key}-${item.id}`}
-                        onClick={() => navigate(group.key === 'students' ? `/students/${item.id}` : group.path)}
+                        onClick={() => navigate(group.key === 'students' ? (isStudent ? '/students/me' : `/students/${item.id}`) : group.path)}
                         className="block w-full text-left rounded-lg px-3 py-2 transition-colors"
                         style={{ color: 'var(--text)' }}
                         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
@@ -368,17 +457,6 @@ function TopBar() {
         {/* Theme toggle */}
         <ThemeToggle />
 
-        <button
-          onClick={toggleLocale}
-          title={text.shell.languageTitle}
-          className="w-8 h-8 flex items-center justify-center rounded-lg transition-all text-[10px] font-bold"
-          style={{ color: 'var(--text-muted)' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'var(--text)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}
-        >
-          {text.shell.language}
-        </button>
-
         {/* Notifications */}
         <div className="relative" ref={notificationsRef}>
         <button
@@ -396,7 +474,7 @@ function TopBar() {
         </button>
         {notificationsOpen && (
           <div
-            className="absolute right-0 top-11 w-[360px] rounded-xl p-2 shadow-2xl z-50 animate-scale-in"
+            className="absolute right-0 top-11 w-[min(92vw,360px)] rounded-xl p-2 shadow-2xl z-50 animate-scale-in"
             style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
           >
             <div className="px-3 py-2" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -425,8 +503,8 @@ function TopBar() {
                       {item.icon === 'risk' ? '!' : item.icon === 'warning' ? '!' : item.icon === 'payment' ? '$' : item.icon === 'attendance' ? '%' : '@'}
                     </span>
                     <div>
-                      <p className="text-[12px] font-semibold" style={{ color: 'var(--text)' }}>{item.title}</p>
-                      <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{item.description}</p>
+                      <p className="text-[12px] font-semibold" style={{ color: 'var(--text)' }}>{localizeNotificationText(item.title, isRtl ? 'ar' : 'en')}</p>
+                      <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{localizeNotificationText(item.description, isRtl ? 'ar' : 'en')}</p>
                     </div>
                   </div>
                 </button>
@@ -488,30 +566,49 @@ function TopBar() {
 
 function Layout() {
   const { isRtl } = useLocale()
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [mobileSidebarOpen])
 
   return (
-    <div className={`app-shell flex h-screen overflow-hidden ${isRtl ? 'flex-row-reverse' : ''}`} style={{ background: 'var(--bg)' }}>
-      <Sidebar />
+    <div className={`app-shell flex h-[100dvh] min-h-screen overflow-hidden ${isRtl ? 'flex-row-reverse' : ''}`} style={{ background: 'var(--bg)' }}>
+      <Sidebar mobileOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-black/45 lg:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+          aria-label="Close menu overlay"
+        />
+      )}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <TopBar />
-        <main className="flex-1 overflow-y-auto p-6" style={{ background: 'var(--bg)' }}>
+        <TopBar onOpenSidebar={() => setMobileSidebarOpen(true)} />
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6" style={{ background: 'var(--bg)' }}>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/"           element={<Dashboard />} />
-              <Route path="/students"   element={<Students />} />
-              <Route path="/students/:id" element={<StudentProfile />} />
-              <Route path="/teachers"   element={<Teachers />} />
-              <Route path="/attendance" element={<Attendance />} />
+              <Route path="/students"   element={<RoleRoute allowed={['ADMIN', 'TEACHER']}><Students /></RoleRoute>} />
+              <Route path="/students/me" element={<RoleRoute allowed={['STUDENT']}><StudentProfile /></RoleRoute>} />
+              <Route path="/students/:id" element={<RoleRoute allowed={['ADMIN', 'TEACHER']}><StudentProfile /></RoleRoute>} />
+              <Route path="/teachers"   element={<RoleRoute allowed={['ADMIN', 'TEACHER']}><Teachers /></RoleRoute>} />
+              <Route path="/attendance" element={<RoleRoute allowed={['ADMIN', 'TEACHER']}><Attendance /></RoleRoute>} />
               <Route path="/calendar"   element={<Calendar />} />
               <Route path="/assignments" element={<Assignments />} />
               <Route path="/payments"   element={<Payments />} />
-              <Route path="/reports"    element={<Reports />} />
-              <Route path="/teacher-performance" element={<TeacherPerformance />} />
-              <Route path="/gradebook" element={<Gradebook />} />
+              <Route path="/reports"    element={<RoleRoute allowed={['ADMIN', 'TEACHER']}><Reports /></RoleRoute>} />
+              <Route path="/teacher-performance" element={<RoleRoute allowed={['ADMIN', 'TEACHER']}><TeacherPerformance /></RoleRoute>} />
+              <Route path="/gradebook" element={<RoleRoute allowed={['ADMIN', 'TEACHER']}><Gradebook /></RoleRoute>} />
               <Route path="/communications" element={<Communications />} />
-              <Route path="/parents" element={<Parents />} />
-              <Route path="/audit-log" element={<AuditLog />} />
-              <Route path="/transcripts" element={<Transcripts />} />
+              <Route path="/parents" element={<RoleRoute allowed={['ADMIN']}><Parents /></RoleRoute>} />
+              <Route path="/audit-log" element={<RoleRoute allowed={['ADMIN']}><AuditLog /></RoleRoute>} />
+              <Route path="/transcripts" element={<RoleRoute allowed={['ADMIN', 'TEACHER', 'STUDENT']}><Transcripts /></RoleRoute>} />
             </Routes>
           </Suspense>
         </main>
